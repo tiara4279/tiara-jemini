@@ -116,8 +116,6 @@ def load_data():
     else: df_merged['TGA_1W_Chg'] = 0
     if 'MMF' in df_merged.columns: df_merged['MMF_1W_Chg'] = df_merged['MMF'].diff(5).fillna(0)
     else: df_merged['MMF_1W_Chg'] = 0
-    if 'TOTLL' in df_merged.columns: df_merged['TOTLL_1W_Chg'] = df_merged['TOTLL'].diff(5).fillna(0)
-    else: df_merged['TOTLL_1W_Chg'] = 0
     
     return df_merged
 
@@ -240,25 +238,46 @@ st.markdown("상업은행의 실제 신용 창출 여부와 단기 달러 자금
 col_b1, col_b2, col_b3 = st.columns(3)
 
 totll_val = get_safe_val(latest, 'TOTLL')
-totll_chg = get_safe_val(latest, 'TOTLL_1W_Chg')
+sofr_val = get_safe_val(latest, 'SOFR')
 sofr_spread = get_safe_val(latest, 'SOFR_IORB_Spread')
 emerg_loans = get_safe_val(latest, 'Emergency_Loans')
 
 with col_b1:
+    # H.8 대출 증감폭을 정확히 전주 데이터와 비교하여 계산
+    totll_chg = totll_val - get_safe_val(prev_week, 'TOTLL')
     st.metric("H.8 상업은행 총대출", f"{totll_val:,.0f}억 달러", f"{totll_chg:,.0f}억 달러 (1W)")
-    if totll_chg > 0: st.caption("🟢 **[신용 팽창]** 실물 경제로 자금 공급 원활")
-    elif totll_chg < 0: st.caption("🔴 **[신용 축소]** 은행 대출 태도 강화 (침체 우려)")
+    if totll_chg > 0: 
+        st.caption("🟢 **[신용 팽창]** 실물 경제로 자금 공급 원활")
+    elif totll_chg < 0: 
+        st.caption("🔴 **[신용 축소]** 은행 대출 태도 강화 (침체 우려)")
+    else: 
+        st.caption("➖ **[대출 정체]** 전주 대비 상업은행 대출 규모 유지")
 
 with col_b2:
-    st.metric("SOFR - IORB 스프레드", f"{sofr_spread:.3f}%", f"{sofr_spread - get_safe_val(prev_week, 'SOFR_IORB_Spread'):.3f}% (1W)")
-    if sofr_spread > 0.05: st.caption("🔴 **[경고]** 단기 자금시장 달러 부족 (발작 조짐)")
-    elif sofr_spread > 0: st.caption("⚠️ **[주의]** 레포 시장 유동성 타이트")
-    else: st.caption("🟢 **[안정]** 단기 자금 조달 원활 (SOFR < IORB)")
+    # SOFR 데이터가 안 들어왔을 경우 방어 코드 및 실제 SOFR 금리 병기
+    prev_sofr_spread = get_safe_val(prev_week, 'SOFR_IORB_Spread')
+    if sofr_val == 0.0:
+        st.metric("SOFR - IORB 스프레드", "데이터 지연")
+        st.caption("➖ API 업데이트 대기중")
+    else:
+        st.metric("SOFR - IORB 스프레드", f"{sofr_spread:.3f}%", f"{sofr_spread - prev_sofr_spread:.3f}% (1W)")
+        if sofr_spread > 0.05: 
+            st.caption(f"🔴 **[경고]** 단기 자금시장 달러 부족 (SOFR: {sofr_val:.2f}%)")
+        elif sofr_spread > 0: 
+            st.caption(f"⚠️ **[주의]** 레포 시장 유동성 타이트 (SOFR: {sofr_val:.2f}%)")
+        else: 
+            st.caption(f"🟢 **[안정]** 단기 자금 조달 원활 (SOFR: {sofr_val:.2f}%)")
 
 with col_b3:
-    st.metric("연준 H.4.1 긴급대출 (할인창구+BTFP)", f"{emerg_loans:,.0f}억 달러", f"{emerg_loans - get_safe_val(prev_week, 'Emergency_Loans'):,.0f}억 달러 (1W)")
-    if emerg_loans > 500: st.caption("🔴 **[위험]** 은행권 뱅크런/스트레스 징후 발생")
-    else: st.caption("🟢 **[안정]** 은행권 연준 긴급 차입 미미함")
+    # 긴급 대출 증감폭 계산
+    emerg_chg = emerg_loans - get_safe_val(prev_week, 'Emergency_Loans')
+    st.metric("연준 H.4.1 긴급대출 (할인창구+BTFP)", f"{emerg_loans:,.0f}억 달러", f"{emerg_chg:,.0f}억 달러 (1W)")
+    if emerg_loans > 500: 
+        st.caption("🔴 **[위험]** 은행권 뱅크런/스트레스 징후 발생")
+    elif emerg_loans > 0:
+        st.caption("⚠️ **[주의]** 일부 은행권 연준 긴급 차입 발생")
+    else: 
+        st.caption("🟢 **[매우 안정]** 위기 없음 (긴급 대출 0)")
 
 st.divider()
 
@@ -290,52 +309,71 @@ def generate_report(latest, prev):
     report = []
     
     vix, move, fsi = get_safe_val(latest, 'VIX'), get_safe_val(latest, 'MOVE'), get_safe_val(latest, 'FSI')
-    yield_curve, hy_spread, prev_hy = get_safe_val(latest, '10Y_2Y'), get_safe_val(latest, 'HY_Spread'), get_safe_val(prev, 'HY_Spread')
+    yield_curve, hy_spread = get_safe_val(latest, '10Y_2Y'), get_safe_val(latest, 'HY_Spread')
     liq_change = get_safe_val(latest, 'Net_Liquidity') - get_safe_val(prev, 'Net_Liquidity')
     
-    # 신규 지표 추출
     sofr_spread = get_safe_val(latest, 'SOFR_IORB_Spread')
-    totll_chg = get_safe_val(latest, 'TOTLL_1W_Chg')
+    totll_val = get_safe_val(latest, 'TOTLL')
+    totll_chg = totll_val - get_safe_val(prev, 'TOTLL')
     dxy = get_safe_val(latest, 'DXY')
     bei = get_safe_val(latest, 'T10YIE')
     emerg_loans = get_safe_val(latest, 'Emergency_Loans')
     
     report.append("### 📌 시장 심리 및 시스템 리스크")
-    if vix > 30: report.append("- **[위험 심리]** VIX가 30을 초과하여 시장 공포가 팽배합니다.")
-    else: report.append("- **[위험 심리]** VIX 지수는 정상 범위 내에서 비교적 안정적인 투자 심리를 보입니다.")
+    if vix > 30: 
+        report.append(f"- **[위험 심리]** 현재 VIX 지수가 {vix:.2f}를 기록하며 30을 초과했습니다. 이는 옵션 시장 참여자들이 향후 극심한 변동성을 예상하고 있음을 의미하며, 시장에 공포 심리가 팽배한 상태입니다.")
+    elif vix < 20: 
+        report.append(f"- **[안정]** 현재 VIX 지수는 {vix:.2f}로 20 미만을 기록하고 있습니다. 시장 참여자들의 불안감이 낮고 비교적 평온한 탐욕/안정 구간에 머물러 있습니다.")
+    else: 
+        report.append(f"- **[중립]** 현재 VIX 지수는 {vix:.2f}로 20~30 사이의 일반적인 경계감을 유지하는 평균적인 구간입니다.")
     
+    system_msg = f"- **[시스템 진단]** 채권 변동성(MOVE)이 {move:.2f}, 연준 긴급 대출 잔액이 {emerg_loans:,.0f}억 달러를 기록 중입니다. "
     if emerg_loans > 500 or move > 140:
-        report.append("- **[시스템 경고]** 연준 긴급 차입액이 높거나 MOVE 지수가 급등했습니다. 은행권 스트레스를 주의하세요.")
+        system_msg += "평균치를 상회하는 자금 조달 및 채권 시장의 스트레스 징후가 관찰되므로 은행권 시스템 위험에 대한 주의가 필요합니다."
+    else:
+        system_msg += "긴급 대출이 거의 없고 지표가 안정적이므로, 현재 시장의 시스템적 위험 수위는 매우 안전한 범위 내에서 통제되고 있습니다."
+    report.append(system_msg)
         
     report.append("\n### 📌 은행 신용 및 달러 펀딩 환경 (새로운 지표)")
     if sofr_spread > 0.05:
-        report.append("- **[달러 접근성 악화]** SOFR 금리가 IORB를 상회하며 단기 자금시장에서 달러 구하기가 어려워지는 '발작 조짐'이 관찰됩니다.")
+        report.append(f"- **[달러 접근성 악화]** 단기 자금 시장의 핵심인 SOFR-IORB 스프레드가 {sofr_spread:.3f}%로 크게 확대되었습니다. 이는 단기 자금시장에서 달러 구하기가 어려워지는 '발작 조짐'을 시사합니다.")
     else:
-        report.append("- **[달러 접근성 양호]** SOFR-IORB 스프레드가 안정적이며 단기 레포 시장의 달러 유동성은 원활합니다.")
+        report.append(f"- **[달러 접근성 양호]** SOFR-IORB 스프레드가 {sofr_spread:.3f}% 수준으로 0% 근방에서 안정적입니다. 단기 레포 시장에서 글로벌 기관들의 달러 유동성 융통이 무리 없이 원활하게 이루어지고 있음을 의미합니다.")
         
     if totll_chg < 0:
-        report.append("- **[신용 축소 우려]** H.8 상업은행 대출이 전주 대비 감소했습니다. 실물 경제로의 자금 공급이 둔화(Credit Crunch)될 우려가 있습니다.")
+        report.append(f"- **[신용 축소 우려]** H.8 상업은행 총대출이 전주 대비 {abs(totll_chg):,.0f}억 달러 감소했습니다. 은행들의 대출 태도가 깐깐해지며 실물 경제로의 자금 공급 둔화(Credit Crunch)가 우려됩니다.")
+    elif totll_chg > 0:
+        report.append(f"- **[신용 팽창]** H.8 상업은행 총대출이 전주 대비 {totll_chg:,.0f}억 달러 증가했습니다. 상업은행의 대출 여력이 유지되며 실물 경제로 신용 창출이 긍정적으로 이어지고 있습니다.")
     else:
-        report.append("- **[신용 팽창]** 상업은행의 대출 여력이 유지되며 실물 경제로 신용 창출이 이어지고 있습니다.")
+        report.append(f"- **[신용 유지]** H.8 상업은행 총대출 규모가 전주 수준을 유지하며 급격한 신용 위축 없이 안정적인 상태를 보이고 있습니다.")
 
     report.append("\n### 📌 매크로 경제 및 인플레이션")
-    if yield_curve < 0: report.append("- **[침체 선행]** 장단기 금리 역전이 지속되고 있어 향후 경기 침체 압박이 존재합니다.")
-    
+    if yield_curve < 0: 
+        report.append(f"- **[침체 선행]** 10년-2년 국채 금리차가 {yield_curve:.2f}%로 역전 상태가 지속되고 있습니다. 이는 역사적으로 향후 경기 침체(Recession) 압박을 예고하는 강력한 선행 지표로 작용합니다.")
+    else:
+        report.append(f"- **[안정적 금리차]** 10년-2년 국채 금리차가 {yield_curve:.2f}%로 정상적인 우상향 곡선을 보이며 경기 침체 우려가 완화된 상태입니다.")
+        
     if dxy > 105:
-        report.append("- **[글로벌 유동성 부담]** 달러 강세(DXY > 105)로 인해 미국 외 국가(특히 신흥국)의 자본 이탈 및 유동성 축소 압박이 커지고 있습니다.")
+        report.append(f"- **[글로벌 유동성 부담]** 달러 인덱스(DXY)가 {dxy:.2f}로 105를 상회하는 강세를 보이고 있습니다. 이는 미국 외 국가(특히 신흥국)의 자본 이탈 및 유동성 축소 압박을 키우는 요인입니다.")
     elif dxy < 100:
-        report.append("- **[글로벌 유동성 우호적]** 달러 약세 흐름은 글로벌 위험 자산에 긍정적인 촉매가 됩니다.")
+        report.append(f"- **[글로벌 유동성 우호적]** 달러 인덱스(DXY)가 {dxy:.2f}로 100 이하의 약세 흐름을 보이고 있습니다. 이는 글로벌 위험 자산과 신흥국 증시에 긍정적인 촉매가 됩니다.")
+    else:
+        report.append(f"- **[달러화 중립]** 달러 인덱스(DXY)가 {dxy:.2f}로 박스권 내 움직임을 보이며 글로벌 유동성에 미치는 환율 영향은 중립적입니다.")
         
     if bei > 2.5:
-        report.append("- **[물가 고착화]** 기대인플레이션(BEI)이 2.5%를 상회하여 연준의 비둘기파적 스탠스(금리 인하)를 제약할 가능성이 큽니다.")
+        report.append(f"- **[물가 고착화 우려]** 10년물 기대인플레이션(BEI)이 {bei:.2f}%를 상회하고 있습니다. 물가가 쉽게 잡히지 않을 것이라는 시장의 우려가 반영되어 연준의 비둘기파적 스탠스(금리 인하)를 강하게 제약할 수 있습니다.")
+    elif bei < 2.0:
+        report.append(f"- **[디스인플레이션]** 10년물 기대인플레이션(BEI)이 {bei:.2f}%를 밑돌고 있습니다. 오히려 경기 둔화 및 디스인플레이션 우려가 커지는 국면입니다.")
+    else:
+        report.append(f"- **[물가 안정화]** 10년물 기대인플레이션(BEI)이 {bei:.2f}%로 연준의 장기 목표치(2%) 근방에서 부합하는 안정적인 물가 궤적을 보이고 있습니다.")
 
     report.append("\n### 📌 종합 자산 배분 전략")
     if (yield_curve < 0 and hy_spread > 5.0) or sofr_spread > 0.1:
-        report.append("👉 **[보수적 대응 권고]** 경기 침체 시그널과 달러 펀딩 스트레스가 동시에 겹쳤습니다. 현금 확보 및 보수적 포트폴리오 운영을 권장합니다.")
+        report.append(f"👉 **[보수적 대응 권고]** 장단기 금리 역전({yield_curve:.2f}%)과 함께 하이일드 스프레드({hy_spread:.2f}%) 상승, 혹은 달러 펀딩 스트레스({sofr_spread:.3f}%)가 복합적으로 나타나고 있습니다. 시장 시스템 리스크가 커지고 있으므로 현금 확보 및 보수적 포트폴리오(채권 우위) 운영을 강력히 권장합니다.")
     elif liq_change > 0 and dxy < 105 and sofr_spread <= 0:
-        report.append("👉 **[위험 자산 선호 유지]** 미국 국내외 달러 유동성이 풍부하게 공급되고 있습니다. 주식 등 위험 자산의 우상향 랠리가 지속될 환경입니다.")
+        report.append(f"👉 **[위험 자산 선호 유지]** 순유동성(Net Liquidity)이 증가(+{liq_change:,.0f}억 달러)하고 달러 가치({dxy:.2f})가 안정적이며 펀딩 시장도 원활합니다. 주식 등 위험 자산의 우상향 랠리를 뒷받침할 훌륭한 매크로 환경이 조성되어 있으므로 비중 유지를 권고합니다.")
     else:
-        report.append("👉 **[관망 및 퀄리티 주식 집중]** 거시 지표가 혼재되어 있습니다. 지수 전반의 랠리보다는 재무 건전성이 뛰어나고 대출 의존도가 낮은 우량 기업 위주로 접근하세요.")
+        report.append("👉 **[관망 및 퀄리티 주식 집중]** 거시 지표들의 방향성이 혼재되어 있어 단기적으로 뚜렷한 추세를 예단하기 어렵습니다. 지수 전반의 베타(Beta) 랠리보다는 재무 건전성이 뛰어나고 대출 의존도가 낮은 우량 기업(Quality) 위주로 선별적인 접근이 필요합니다.")
 
     return "\n".join(report)
 
