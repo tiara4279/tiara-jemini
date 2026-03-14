@@ -241,7 +241,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     except Exception as e:
         pass
 
-st.subheader("📊 주요 유동성 창구 주간 증감 (단위: Billions $)")
+st.subheader("📊 주요 유동성 창구 주간 증감")
 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
 
 fed_bs_val = get_safe_val(latest, 'Fed_BS')
@@ -255,7 +255,7 @@ rrp_chg = rrp_val - get_safe_val(prev_week, 'RRP')
 tga_chg = get_safe_val(latest, 'TGA_1W_Chg')
 
 with col_l1:
-    st.metric("연준 대차대조표", f"{fed_bs_val:,.0f}", f"{fed_chg:,.0f}")
+    st.metric("연준 대차대조표", f"${fed_bs_val:,.0f}B", f"{fed_chg:,.0f}B")
     if fed_chg > 0:
         st.caption("🟢 **[유동성 팽창]** 시중에 자금 공급. 증시 우상향 동력")
     elif fed_chg < 0:
@@ -264,7 +264,7 @@ with col_l1:
         st.caption("➖ 변동 없음")
 
 with col_l2:
-    st.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f}", f"{res_chg:,.0f}")
+    st.metric("지급준비금 (Reserves)", f"${reserves_val:,.0f}B", f"{res_chg:,.0f}B")
     if res_chg > 0:
         st.caption("🟢 **[신용 확대]** 은행 대출/투자 여력 증가. 증시 활력 요소")
     elif res_chg < 0:
@@ -273,7 +273,7 @@ with col_l2:
         st.caption("➖ 변동 없음")
 
 with col_l3:
-    st.metric("역레포 (RRP)", f"{rrp_val:,.0f}", f"{rrp_chg:,.0f}")
+    st.metric("역레포 (RRP)", f"${rrp_val:,.0f}B", f"{rrp_chg:,.0f}B")
     if rrp_val < 100 and rrp_val > 0.0:
         st.caption("⚠️ **[바닥 근접]** RRP를 통한 추가 유동성 공급 한계 임박")
     elif rrp_val == 0.0:
@@ -284,7 +284,7 @@ with col_l3:
         st.caption("🟢 **[위험 선호]** 대기 자금이 증시 등 위험 자산으로 이동중")
 
 with col_l4:
-    st.metric("TGA (재무부 계좌)", f"{tga_val:,.0f}", f"{tga_chg:,.0f}")
+    st.metric("TGA (재무부 계좌)", f"${tga_val:,.0f}B", f"{tga_chg:,.0f}B")
     if tga_chg > 0:
         st.caption("🔴 **[자금 흡수]** 세금/국채 발행으로 시중 자금 흡수. 단기 압박")
     elif tga_chg < 0:
