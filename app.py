@@ -10,18 +10,26 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS (지표 제목 크기 확대) ---
+# --- 커스텀 CSS 및 자동 번역 방지 메타 태그 ---
+# 브라우저(크롬 등)가 페이지를 임의로 오역하는 것을 방지 (notranslate 클래스 주입 및 메타 태그)
 st.markdown("""
+<meta name="google" content="notranslate">
 <style>
 /* st.metric 의 라벨(제목) 폰트 크기 및 굵기 변경 */
 [data-testid="stMetricLabel"] > div {
     font-size: 20px !important;
     font-weight: 800 !important;
 }
+
+/* 전체 앱 번역 방지 클래스 적용 효과 */
+body {
+    transform: none !important;
+}
 </style>
+<div class="notranslate">
 """, unsafe_allow_html=True)
 
-st.title("🌐 시장 경제 지표 분석 대시보드")
+st.title("🌐 시장 경제 지표 대시보드")
 st.markdown("시장의 위험 심리, 경기 사이클, 그리고 핵심 유동성 흐름을 매일 추적합니다.")
 
 # --- 데이터 로드 함수 (결측치 및 에러 처리 강화) ---
@@ -52,8 +60,12 @@ def load_data():
         except Exception as e:
             pass # 일부 데이터 로드 실패 시 무시하고 진행
 
-    # 단위 통일 (Billions -> Millions 방지, 모두 Billions 단위로 맞춤)
+    # --- [수정] 단위 완벽 통일 (모두 Billions 단위로 맞춤) ---
+    # WALCL, WRESBAL, WTREGEN, MMMFFAQ027S는 Millions 단위이므로 /1000
+    # RRPONTSYD는 원래 Billions 단위이므로 그대로 둠
     if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 1000
+    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 1000
+    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 1000
     if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] / 1000
 
     # 2. Yahoo Finance 데이터 가져오기
@@ -81,7 +93,7 @@ def load_data():
     df_merged = df_merged.fillna(0)
     
     # 4. 파생 변수 계산
-    # Net Liquidity = Fed BS - RRP - TGA
+    # Net Liquidity = Fed BS - RRP - TGA (모두 Billions 단위로 계산됨)
     if all(col in df_merged.columns for col in ['Fed_BS', 'RRP', 'TGA']):
         df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
     else:
@@ -164,7 +176,6 @@ with col4:
     st.caption(f"상태: {fsi_status}")
 
 with col5:
-    # 하이일드 스프레드가 5.0%를 넘어가면 신용 경색 우려로 판단 (통상적 기준)
     hy_status = check_status(hy_val, 5.0, 'greater', "신용 경색 경보", "안정적")
     st.metric(label="하이일드 스프레드", value=f"{hy_val:.2f}%", delta=f"{hy_val - get_safe_val(prev_week, 'HY_Spread'):.2f}% (1W)")
     st.caption(f"상태: {hy_status}")
@@ -193,9 +204,9 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq.update_yaxes(title_text="Net Liquidity (B$)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
     
-    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가
+    # [수정] rangeslider_visible=False 로 변경하여 S&P 500 차트가 찌그러지는 오류 해결
     fig_liq.update_xaxes(
-        rangeslider_visible=True,
+        rangeslider_visible=False,
         rangeselector=dict(
             buttons=list([
                 dict(count=1, label="1개월", step="month", stepmode="backward"),
@@ -211,7 +222,6 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 
     # --- 그래프 하단 지표 설명 및 현재 상태 진단 추가 ---
     try:
-        # 최근 1개월(약 20영업일) 추세 비교
         prev_month_idx = -20 if len(df) >= 20 else 0
         prev_month = df.iloc[prev_month_idx]
         
@@ -236,7 +246,6 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
         """)
     except Exception as e:
         pass
-    # --------------------------------------------------
 
 st.subheader("📊 주요 유동성 창구 주간 증감 (단위: Billions $)")
 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
@@ -299,7 +308,6 @@ st.markdown("""
 """)
 
 if 'MMF' in df.columns and 'RRP' in df.columns:
-    # 차트를 위(MMF) / 아래(RRP)로 분리하여 생성 (x축은 동기화)
     fig_flow = make_subplots(
         rows=2, cols=1, 
         shared_xaxes=True, 
@@ -312,9 +320,9 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
     
     fig_flow.update_layout(title_text="MMF 및 RRP 자금 흐름 (분리 차트)", height=700, hovermode="x unified", showlegend=False)
     
-    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가 (아래쪽 차트에만 추가하여 깔끔하게 배치)
+    # 안정성을 위해 여기서도 rangeslider 제거, 버튼만 남김
     fig_flow.update_xaxes(
-        rangeslider_visible=True,
+        rangeslider_visible=False,
         rangeselector=dict(
             buttons=list([
                 dict(count=1, label="1개월", step="month", stepmode="backward"),
@@ -324,10 +332,10 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
                 dict(step="all", label="전체")
             ])
         ),
-        row=2, col=1
+        row=1, col=1
     )
+    fig_flow.update_xaxes(rangeslider_visible=False, row=2, col=1)
     
-    # Y축 레이블 설정
     fig_flow.update_yaxes(title_text="MMF 잔액 (B$)", row=1, col=1)
     fig_flow.update_yaxes(title_text="RRP 잔액 (B$)", row=2, col=1)
 
@@ -341,7 +349,6 @@ st.header("📝 4. AI 기반 자동 매크로 시황 리포트")
 def generate_report(latest, prev):
     report = []
     
-    # 안전 값 가져오기
     vix = get_safe_val(latest, 'VIX')
     move = get_safe_val(latest, 'MOVE')
     fsi = get_safe_val(latest, 'FSI')
@@ -353,7 +360,6 @@ def generate_report(latest, prev):
     mmf_chg = get_safe_val(latest, 'MMF_1W_Chg')
     rrp_chg = get_safe_val(latest, 'RRP') - get_safe_val(prev, 'RRP')
     
-    # 1. 심리 및 리스크 (모든 상황 출력되도록 else 보강)
     report.append("### 📌 시장 심리 및 리스크 진단")
     if vix > 30:
         report.append("- **[경고]** VIX가 30을 초과했습니다. 옵션 시장이 향후 큰 변동성을 예상하며 시장에 공포 심리가 팽배합니다.")
@@ -372,7 +378,6 @@ def generate_report(latest, prev):
     else:
         report.append("- 금융 스트레스 지수(FSI)가 0 미만으로 금융 시스템 내 유동성 경색 징후는 발견되지 않습니다.")
 
-    # 2. 경기 사이클
     report.append("\n### 📌 경기 사이클 진단")
     if yield_curve < 0 and yield_curve != 0:
         report.append("- **[침체 신호]** 장단기 금리(10Y-2Y)가 역전된 상태입니다. 역사적으로 경기 침체의 강력한 선행 지표입니다.")
@@ -381,7 +386,6 @@ def generate_report(latest, prev):
     else:
         report.append("- 장단기 금리차는 안정적 구간에 있습니다.")
 
-    # 3. 유동성 방향
     report.append("\n### 📌 유동성 흐름 및 향후 전망")
     if liq_change > 0:
         report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 ${abs(liq_change):,.0f}B 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
@@ -397,7 +401,6 @@ def generate_report(latest, prev):
     else:
         report.append("- TGA 계좌 잔고에 큰 변동은 관찰되지 않았습니다.")
 
-    # 4. 기관 자금 동향 (추가)
     report.append("\n### 📌 기관 자금 동향")
     if mmf_chg > 0 and rrp_chg > 0:
         report.append("- **[자금 흐름]** MMF와 역레포 잔액이 동반 상승 중입니다. 기관들이 투자를 꺼리고 단기 현금성 자산으로 대피(위험 회피)하는 징후입니다.")
@@ -406,7 +409,6 @@ def generate_report(latest, prev):
     else:
         report.append("- **[자금 흐름]** MMF와 역레포의 자금 이동 방향이 엇갈리거나 변동이 적습니다. 뚜렷한 쏠림 현상보다는 관망세가 나타나고 있습니다.")
     
-    # 종합 전망 결론
     report.append("\n### 💡 종합 미래 전망")
     if yield_curve < 0 and fsi > 0 and liq_change < 0:
         report.append("👉 **[보수적 대응 권고]** 경기 침체 시그널과 유동성 축소가 겹치고 있습니다. 주식 비중을 축소하고 현금/채권 비중 확대를 고려할 시점입니다.")
@@ -417,8 +419,8 @@ def generate_report(latest, prev):
 
     return "\n".join(report)
 
-# 리포트 출력 구역
 report_text = generate_report(latest, prev_week)
 st.info(report_text)
 
 st.caption(f"마지막 데이터 업데이트: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
+st.markdown("</div>", unsafe_allow_html=True)
