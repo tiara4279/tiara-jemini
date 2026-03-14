@@ -327,7 +327,7 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
 
 st.divider()
 
-# --- 4. 자동 매크로 리포트 생성 ---
+# --- 4. 자동 매크로 시황 리포트 생성 ---
 st.header("📝 4. AI 기반 자동 매크로 시황 리포트")
 
 def generate_report(latest, prev):
@@ -345,18 +345,24 @@ def generate_report(latest, prev):
     mmf_chg = get_safe_val(latest, 'MMF_1W_Chg')
     rrp_chg = get_safe_val(latest, 'RRP') - get_safe_val(prev, 'RRP')
     
-    # 1. 심리 및 리스크
+    # 1. 심리 및 리스크 (모든 상황 출력되도록 else 보강)
     report.append("### 📌 시장 심리 및 리스크 진단")
     if vix > 30:
         report.append("- **[경고]** VIX가 30을 초과했습니다. 옵션 시장이 향후 큰 변동성을 예상하며 시장에 공포 심리가 팽배합니다.")
     elif 0 < vix < 20:
         report.append("- **[안정]** VIX가 20 미만으로 시장은 비교적 평온하며 탐욕/안정 구간에 있습니다.")
+    else:
+        report.append("- **[중립]** VIX가 20~30 사이로 일반적인 경계감을 유지하는 평균적인 구간입니다.")
         
     if move > 140:
         report.append("- **[위험]** 채권 VIX인 MOVE 지수가 140을 넘었습니다. 은행/채권 시스템의 스트레스가 우려됩니다.")
+    else:
+        report.append("- 채권 시장의 변동성(MOVE)은 140 이하로 시스템적 위험 수위 아래에서 안정적으로 움직이고 있습니다.")
     
     if fsi > 0:
         report.append("- **[주의]** 금융 스트레스 지수(FSI)가 0을 상회하고 있습니다. 시스템적 신용 경색 조짐을 모니터링해야 합니다.")
+    else:
+        report.append("- 금융 스트레스 지수(FSI)가 0 미만으로 금융 시스템 내 유동성 경색 징후는 발견되지 않습니다.")
 
     # 2. 경기 사이클
     report.append("\n### 📌 경기 사이클 진단")
@@ -373,17 +379,24 @@ def generate_report(latest, prev):
         report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 ${abs(liq_change):,.0f}B 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
     elif liq_change < 0:
         report.append(f"- **[부정적]** 지난주 대비 Net Liquidity(순유동성)가 약 ${abs(liq_change):,.0f}B 감소했습니다. 유동성 축소로 인한 자산 가격 조정에 유의해야 합니다.")
+    else:
+        report.append("- 지난주 대비 Net Liquidity(순유동성)의 유의미한 큰 변동은 없습니다.")
         
     if tga_chg > 0:
         report.append("- TGA 계좌 잔고가 증가하고 있습니다. 이는 시중의 돈을 정부가 흡수하고 있다는 의미로 단기적 유동성 압박 요인입니다.")
     elif tga_chg < 0:
         report.append("- TGA 계좌 잔고가 감소하며 시중에 돈이 풀리고 있습니다.")
+    else:
+        report.append("- TGA 계좌 잔고에 큰 변동은 관찰되지 않았습니다.")
 
-    # 4. 기관 자금 동향
+    # 4. 기관 자금 동향 (추가)
+    report.append("\n### 📌 기관 자금 동향")
     if mmf_chg > 0 and rrp_chg > 0:
         report.append("- **[자금 흐름]** MMF와 역레포 잔액이 동반 상승 중입니다. 기관들이 투자를 꺼리고 단기 현금성 자산으로 대피(위험 회피)하는 징후입니다.")
     elif mmf_chg < 0 and rrp_chg < 0:
         report.append("- **[자금 흐름]** MMF와 역레포 잔액이 감소하고 있습니다. 대기 자금이 위험 자산(주식 등)으로 이동(위험 선호)하고 있을 가능성이 높습니다.")
+    else:
+        report.append("- **[자금 흐름]** MMF와 역레포의 자금 이동 방향이 엇갈리거나 변동이 적습니다. 뚜렷한 쏠림 현상보다는 관망세가 나타나고 있습니다.")
     
     # 종합 전망 결론
     report.append("\n### 💡 종합 미래 전망")
