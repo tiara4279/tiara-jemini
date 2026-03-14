@@ -291,12 +291,20 @@ st.markdown("""
 """)
 
 if 'MMF' in df.columns and 'RRP' in df.columns:
-    fig_flow = plotly_go.Figure()
-    fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['MMF'], name="MMF 총 잔액", fill='tozeroy', line=dict(color='purple')))
-    fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['RRP'], name="역레포 (RRP)", fill='tozeroy', line=dict(color='orange')))
-    fig_flow.update_layout(title_text="MMF vs RRP 자금 흐름 추이", height=500, hovermode="x unified")
+    # 차트를 위(MMF) / 아래(RRP)로 분리하여 생성 (x축은 동기화)
+    fig_flow = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.1,
+        subplot_titles=("MMF 총 잔액 추이", "역레포(RRP) 잔액 추이")
+    )
     
-    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가
+    fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['MMF'], name="MMF 총 잔액", fill='tozeroy', line=dict(color='purple')), row=1, col=1)
+    fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['RRP'], name="역레포 (RRP)", fill='tozeroy', line=dict(color='orange')), row=2, col=1)
+    
+    fig_flow.update_layout(title_text="MMF 및 RRP 자금 흐름 (분리 차트)", height=700, hovermode="x unified", showlegend=False)
+    
+    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가 (아래쪽 차트에만 추가하여 깔끔하게 배치)
     fig_flow.update_xaxes(
         rangeslider_visible=True,
         rangeselector=dict(
@@ -307,8 +315,13 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
                 dict(count=1, label="1년", step="year", stepmode="backward"),
                 dict(step="all", label="전체")
             ])
-        )
+        ),
+        row=2, col=1
     )
+    
+    # Y축 레이블 설정
+    fig_flow.update_yaxes(title_text="MMF 잔액 (B$)", row=1, col=1)
+    fig_flow.update_yaxes(title_text="RRP 잔액 (B$)", row=2, col=1)
 
     st.plotly_chart(fig_flow, use_container_width=True)
 
