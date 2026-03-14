@@ -21,7 +21,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌐 매크로 & 유동성 분석 대시보드")
+st.title("🌐 시장 경제 지표 분석 대시보드")
 st.markdown("시장의 위험 심리, 경기 사이클, 그리고 핵심 유동성 흐름을 매일 추적합니다.")
 
 # --- 데이터 로드 함수 (결측치 및 에러 처리 강화) ---
@@ -181,10 +181,54 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
         plotly_go.Scatter(x=df.index, y=df['SP500'], name="S&P 500", line=dict(color='red', width=1)),
         secondary_y=True,
     )
-    fig_liq.update_layout(title_text="Net Liquidity vs S&P 500 추이", height=500, hovermode="x unified")
+    fig_liq.update_layout(title_text="Net Liquidity vs S&P 500 추이", height=600, hovermode="x unified")
     fig_liq.update_yaxes(title_text="Net Liquidity (B$)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
+    
+    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가
+    fig_liq.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=list([
+                dict(count=1, label="1개월", step="month", stepmode="backward"),
+                dict(count=3, label="3개월", step="month", stepmode="backward"),
+                dict(count=6, label="6개월", step="month", stepmode="backward"),
+                dict(count=1, label="1년", step="year", stepmode="backward"),
+                dict(step="all", label="전체")
+            ])
+        )
+    )
+
     st.plotly_chart(fig_liq, use_container_width=True)
+
+    # --- 그래프 하단 지표 설명 및 현재 상태 진단 추가 ---
+    try:
+        # 최근 1개월(약 20영업일) 추세 비교
+        prev_month_idx = -20 if len(df) >= 20 else 0
+        prev_month = df.iloc[prev_month_idx]
+        
+        liq_1m_chg = get_safe_val(latest, 'Net_Liquidity') - get_safe_val(prev_month, 'Net_Liquidity')
+        sp500_1m_chg = get_safe_val(latest, 'SP500') - get_safe_val(prev_month, 'SP500')
+        
+        status_msg = "**💡 최근 1개월 기준 현재 상태 진단:** "
+        if liq_1m_chg > 0 and sp500_1m_chg > 0:
+            status_msg += "✅ **[건강한 상승]** 유동성이 증가하며 주식 시장의 상승을 탄탄하게 뒷받침하고 있습니다."
+        elif liq_1m_chg < 0 and sp500_1m_chg > 0:
+            status_msg += "⚠️ **[유동성 괴리 주의]** 유동성(파란선)은 감소하고 있으나 S&P 500(빨간선)은 상승하고 있습니다. 유동성 뒷받침이 부족한 랠리이므로 단기 조정(하락) 가능성에 주의해야 합니다."
+        elif liq_1m_chg > 0 and sp500_1m_chg < 0:
+            status_msg += "⏳ **[저가 매수 탐색]** 시장에 유동성은 공급되고 있으나 주식 시장은 조정을 받고 있습니다. 풍부한 유동성이 증시를 다시 밀어올릴 가능성(시차)을 주시하세요."
+        else:
+            status_msg += "📉 **[유동성 축소 동기화]** 유동성 축소와 함께 주식 시장도 하락/조정을 받고 있는 전형적인 긴축 및 조정장 형태입니다."
+            
+        st.info(f"""
+        **지표 의미:** Net Liquidity(순유동성)는 연준이 시장에 실질적으로 푼 돈의 양을 뜻합니다. 
+        통상적으로 **파란선(순유동성)**이 오르면 시중에 돈이 많아져 **빨간선(S&P 500)**도 오르고, 내리면 함께 내리는 강한 양(+)의 상관관계를 가집니다.
+        
+        {status_msg}
+        """)
+    except Exception as e:
+        pass
+    # --------------------------------------------------
 
 st.subheader("📊 주요 유동성 창구 주간 증감 (단위: Billions $)")
 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
@@ -194,10 +238,48 @@ reserves_val = get_safe_val(latest, 'Reserves')
 rrp_val = get_safe_val(latest, 'RRP')
 tga_val = get_safe_val(latest, 'TGA')
 
-col_l1.metric("연준 대차대조표", f"{fed_bs_val:,.0f}", f"{fed_bs_val - get_safe_val(prev_week, 'Fed_BS'):,.0f}")
-col_l2.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f}", f"{get_safe_val(latest, 'Reserves_1W_Chg'):,.0f}")
-col_l3.metric("역레포 (RRP)", f"{rrp_val:,.0f}", f"{rrp_val - get_safe_val(prev_week, 'RRP'):,.0f}")
-col_l4.metric("TGA (재무부 계좌)", f"{tga_val:,.0f}", f"{get_safe_val(latest, 'TGA_1W_Chg'):,.0f}")
+fed_chg = fed_bs_val - get_safe_val(prev_week, 'Fed_BS')
+res_chg = get_safe_val(latest, 'Reserves_1W_Chg')
+rrp_chg = rrp_val - get_safe_val(prev_week, 'RRP')
+tga_chg = get_safe_val(latest, 'TGA_1W_Chg')
+
+with col_l1:
+    st.metric("연준 대차대조표", f"{fed_bs_val:,.0f}", f"{fed_chg:,.0f}")
+    if fed_chg > 0:
+        st.caption("🟢 **[유동성 팽창]** 시중에 자금 공급. 증시 우상향 동력")
+    elif fed_chg < 0:
+        st.caption("🔴 **[QT 진행]** 연준 자산 축소중. 증시 상단 제한 우려")
+    else:
+        st.caption("➖ 변동 없음")
+
+with col_l2:
+    st.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f}", f"{res_chg:,.0f}")
+    if res_chg > 0:
+        st.caption("🟢 **[신용 확대]** 은행 대출/투자 여력 증가. 증시 활력 요소")
+    elif res_chg < 0:
+        st.caption("🔴 **[신용 축소]** 은행 자금 여력 감소. 하락 변동성 대비")
+    else:
+        st.caption("➖ 변동 없음")
+
+with col_l3:
+    st.metric("역레포 (RRP)", f"{rrp_val:,.0f}", f"{rrp_chg:,.0f}")
+    if rrp_val < 100 and rrp_val > 0.0:
+        st.caption("⚠️ **[바닥 근접]** RRP를 통한 추가 유동성 공급 한계 임박")
+    elif rrp_val == 0.0:
+        st.caption("⚠️ **[고갈]** 대기 자금 소진. 추가 유동성 완충재 없음")
+    elif rrp_chg > 0:
+        st.caption("🔴 **[위험 회피]** 대기 자금이 연준으로 회귀. 시장 자금 이탈")
+    else:
+        st.caption("🟢 **[위험 선호]** 대기 자금이 증시 등 위험 자산으로 이동중")
+
+with col_l4:
+    st.metric("TGA (재무부 계좌)", f"{tga_val:,.0f}", f"{tga_chg:,.0f}")
+    if tga_chg > 0:
+        st.caption("🔴 **[자금 흡수]** 세금/국채 발행으로 시중 자금 흡수. 단기 압박")
+    elif tga_chg < 0:
+        st.caption("🟢 **[재정 지출]** 정부 예산 집행으로 시중에 자금 펌핑중")
+    else:
+        st.caption("➖ 변동 없음")
 
 st.divider()
 
@@ -212,7 +294,22 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
     fig_flow = plotly_go.Figure()
     fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['MMF'], name="MMF 총 잔액", fill='tozeroy', line=dict(color='purple')))
     fig_flow.add_trace(plotly_go.Scatter(x=df.index, y=df['RRP'], name="역레포 (RRP)", fill='tozeroy', line=dict(color='orange')))
-    fig_flow.update_layout(title_text="MMF vs RRP 자금 흐름 추이", height=400, hovermode="x unified")
+    fig_flow.update_layout(title_text="MMF vs RRP 자금 흐름 추이", height=500, hovermode="x unified")
+    
+    # x축에 범위 선택기(버튼) 및 하단 슬라이더 추가
+    fig_flow.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=list([
+                dict(count=1, label="1개월", step="month", stepmode="backward"),
+                dict(count=3, label="3개월", step="month", stepmode="backward"),
+                dict(count=6, label="6개월", step="month", stepmode="backward"),
+                dict(count=1, label="1년", step="year", stepmode="backward"),
+                dict(step="all", label="전체")
+            ])
+        )
+    )
+
     st.plotly_chart(fig_flow, use_container_width=True)
 
 st.divider()
