@@ -9,6 +9,18 @@ import numpy as np
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
+
+# --- 커스텀 CSS (지표 제목 크기 확대) ---
+st.markdown("""
+<style>
+/* st.metric 의 라벨(제목) 폰트 크기 및 굵기 변경 */
+[data-testid="stMetricLabel"] > div {
+    font-size: 20px !important;
+    font-weight: 800 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🌐 매크로 & 유동성 분석 대시보드")
 st.markdown("시장의 위험 심리, 경기 사이클, 그리고 핵심 유동성 흐름을 매일 추적합니다.")
 
