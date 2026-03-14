@@ -54,13 +54,14 @@ def load_data():
         except Exception as e:
             pass # 일부 데이터 로드 실패 시 무시하고 진행
 
-    # --- [수정] 단위 완벽 통일 (모두 Billions 단위로 맞춤) ---
-    # WALCL, WRESBAL, WTREGEN, MMMFFAQ027S는 Millions 단위이므로 /1000
-    # RRPONTSYD는 원래 Billions 단위이므로 그대로 둠
-    if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 1000
-    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 1000
-    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 1000
-    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] / 1000
+    # --- [수정] 모든 단위를 정확한 '달러(실제 금액)'로 완전 환산 ---
+    # WALCL, WRESBAL, WTREGEN, MMMFFAQ027S는 Millions(백만) 단위이므로 * 1,000,000
+    # RRPONTSYD는 원래 Billions(10억) 단위이므로 * 1,000,000,000
+    if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] * 1000000
+    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] * 1000000
+    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] * 1000000
+    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] * 1000000
+    if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 1000000000
 
     # 2. Yahoo Finance 데이터 가져오기
     tickers = ['^GSPC', '^MOVE']
@@ -87,7 +88,7 @@ def load_data():
     df_merged = df_merged.fillna(0)
     
     # 4. 파생 변수 계산
-    # Net Liquidity = Fed BS - RRP - TGA (모두 Billions 단위로 계산됨)
+    # Net Liquidity = Fed BS - RRP - TGA (모두 실제 달러 단위로 계산됨)
     if all(col in df_merged.columns for col in ['Fed_BS', 'RRP', 'TGA']):
         df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
     else:
@@ -131,7 +132,6 @@ def get_safe_val(row, col_name):
 # --- 1. 시장 리스크 경고 시스템 (최상단) ---
 st.header("🚨 1. 시장 리스크 경고 시스템")
 
-# 하이일드 스프레드 추가를 위해 5개 컬럼으로 변경
 col1, col2, col3, col4, col5 = st.columns(5)
 
 def check_status(value, threshold, condition, danger_msg, safe_msg):
@@ -187,7 +187,7 @@ st.markdown("""
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
     fig_liq.add_trace(
-        plotly_go.Scatter(x=df.index, y=df['Net_Liquidity'], name="US Net Liquidity (Billions $)", line=dict(color='blue')),
+        plotly_go.Scatter(x=df.index, y=df['Net_Liquidity'], name="US Net Liquidity (달러)", line=dict(color='blue')),
         secondary_y=False,
     )
     fig_liq.add_trace(
@@ -195,10 +195,9 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
         secondary_y=True,
     )
     fig_liq.update_layout(title_text="Net Liquidity vs S&P 500 추이", height=600, hovermode="x unified")
-    fig_liq.update_yaxes(title_text="Net Liquidity (B$)", secondary_y=False)
+    fig_liq.update_yaxes(title_text="Net Liquidity (달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
     
-    # [수정] rangeslider_visible=False 로 변경하여 S&P 500 차트가 찌그러지는 오류 해결
     fig_liq.update_xaxes(
         rangeslider_visible=False,
         rangeselector=dict(
@@ -255,7 +254,7 @@ rrp_chg = rrp_val - get_safe_val(prev_week, 'RRP')
 tga_chg = get_safe_val(latest, 'TGA_1W_Chg')
 
 with col_l1:
-    st.metric("연준 대차대조표", f"${fed_bs_val:,.0f}B", f"{fed_chg:,.0f}B")
+    st.metric("연준 대차대조표", f"{fed_bs_val:,.0f} 달러", f"{fed_chg:,.0f} 달러")
     if fed_chg > 0:
         st.caption("🟢 **[유동성 팽창]** 시중에 자금 공급. 증시 우상향 동력")
     elif fed_chg < 0:
@@ -264,7 +263,7 @@ with col_l1:
         st.caption("➖ 변동 없음")
 
 with col_l2:
-    st.metric("지급준비금 (Reserves)", f"${reserves_val:,.0f}B", f"{res_chg:,.0f}B")
+    st.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f} 달러", f"{res_chg:,.0f} 달러")
     if res_chg > 0:
         st.caption("🟢 **[신용 확대]** 은행 대출/투자 여력 증가. 증시 활력 요소")
     elif res_chg < 0:
@@ -273,8 +272,9 @@ with col_l2:
         st.caption("➖ 변동 없음")
 
 with col_l3:
-    st.metric("역레포 (RRP)", f"${rrp_val:,.0f}B", f"{rrp_chg:,.0f}B")
-    if rrp_val < 100 and rrp_val > 0.0:
+    st.metric("역레포 (RRP)", f"{rrp_val:,.0f} 달러", f"{rrp_chg:,.0f} 달러")
+    # 실제 달러 기준이므로 1000억 달러 미만인지 검사
+    if rrp_val < 100_000_000_000 and rrp_val > 0.0:
         st.caption("⚠️ **[바닥 근접]** RRP를 통한 추가 유동성 공급 한계 임박")
     elif rrp_val == 0.0:
         st.caption("⚠️ **[고갈]** 대기 자금 소진. 추가 유동성 완충재 없음")
@@ -284,7 +284,7 @@ with col_l3:
         st.caption("🟢 **[위험 선호]** 대기 자금이 증시 등 위험 자산으로 이동중")
 
 with col_l4:
-    st.metric("TGA (재무부 계좌)", f"${tga_val:,.0f}B", f"{tga_chg:,.0f}B")
+    st.metric("TGA (재무부 계좌)", f"{tga_val:,.0f} 달러", f"{tga_chg:,.0f} 달러")
     if tga_chg > 0:
         st.caption("🔴 **[자금 흡수]** 세금/국채 발행으로 시중 자금 흡수. 단기 압박")
     elif tga_chg < 0:
@@ -314,7 +314,6 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
     
     fig_flow.update_layout(title_text="MMF 및 RRP 자금 흐름 (분리 차트)", height=700, hovermode="x unified", showlegend=False)
     
-    # 안정성을 위해 여기서도 rangeslider 제거, 버튼만 남김
     fig_flow.update_xaxes(
         rangeslider_visible=False,
         rangeselector=dict(
@@ -330,8 +329,8 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
     )
     fig_flow.update_xaxes(rangeslider_visible=False, row=2, col=1)
     
-    fig_flow.update_yaxes(title_text="MMF 잔액 (B$)", row=1, col=1)
-    fig_flow.update_yaxes(title_text="RRP 잔액 (B$)", row=2, col=1)
+    fig_flow.update_yaxes(title_text="MMF 잔액 (달러)", row=1, col=1)
+    fig_flow.update_yaxes(title_text="RRP 잔액 (달러)", row=2, col=1)
 
     st.plotly_chart(fig_flow, use_container_width=True)
 
@@ -382,9 +381,9 @@ def generate_report(latest, prev):
 
     report.append("\n### 📌 유동성 흐름 및 향후 전망")
     if liq_change > 0:
-        report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 ${abs(liq_change):,.0f}B 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
+        report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f} 달러 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
     elif liq_change < 0:
-        report.append(f"- **[부정적]** 지난주 대비 Net Liquidity(순유동성)가 약 ${abs(liq_change):,.0f}B 감소했습니다. 유동성 축소로 인한 자산 가격 조정에 유의해야 합니다.")
+        report.append(f"- **[부정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f} 달러 감소했습니다. 유동성 축소로 인한 자산 가격 조정에 유의해야 합니다.")
     else:
         report.append("- 지난주 대비 Net Liquidity(순유동성)의 유의미한 큰 변동은 없습니다.")
         
