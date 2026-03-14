@@ -125,7 +125,8 @@ def get_safe_val(row, col_name):
 # --- 1. 시장 리스크 경고 시스템 (최상단) ---
 st.header("🚨 1. 시장 리스크 경고 시스템")
 
-col1, col2, col3, col4 = st.columns(4)
+# 하이일드 스프레드 추가를 위해 5개 컬럼으로 변경
+col1, col2, col3, col4, col5 = st.columns(5)
 
 def check_status(value, threshold, condition, danger_msg, safe_msg):
     if value == 0.0: return "데이터 없음"
@@ -140,6 +141,7 @@ vix_val = get_safe_val(latest, 'VIX')
 move_val = get_safe_val(latest, 'MOVE')
 yield_val = get_safe_val(latest, '10Y_2Y')
 fsi_val = get_safe_val(latest, 'FSI')
+hy_val = get_safe_val(latest, 'HY_Spread')
 
 with col1:
     vix_status = check_status(vix_val, 30, 'greater', "시장 공포 극대화", "안정적")
@@ -160,6 +162,12 @@ with col4:
     fsi_status = check_status(fsi_val, 0, 'greater', "금융 시스템 스트레스 발생", "유동성 원활")
     st.metric(label="금융 스트레스 지수 (FSI)", value=f"{fsi_val:.2f}", delta=f"{fsi_val - get_safe_val(prev_week, 'FSI'):.2f} (1W)")
     st.caption(f"상태: {fsi_status}")
+
+with col5:
+    # 하이일드 스프레드가 5.0%를 넘어가면 신용 경색 우려로 판단 (통상적 기준)
+    hy_status = check_status(hy_val, 5.0, 'greater', "신용 경색 경보", "안정적")
+    st.metric(label="하이일드 스프레드", value=f"{hy_val:.2f}%", delta=f"{hy_val - get_safe_val(prev_week, 'HY_Spread'):.2f}% (1W)")
+    st.caption(f"상태: {hy_status}")
 
 st.divider()
 
