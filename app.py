@@ -54,14 +54,14 @@ def load_data():
         except Exception as e:
             pass # 일부 데이터 로드 실패 시 무시하고 진행
 
-    # --- [수정] 모든 단위를 정확한 '달러(실제 금액)'로 완전 환산 ---
-    # WALCL, WRESBAL, WTREGEN, MMMFFAQ027S는 Millions(백만) 단위이므로 * 1,000,000
-    # RRPONTSYD는 원래 Billions(10억) 단위이므로 * 1,000,000,000
-    if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] * 1000000
-    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] * 1000000
-    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] * 1000000
-    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] * 1000000
-    if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 1000000000
+    # --- [수정] 모든 단위를 '억 달러(100 Millions)' 단위로 환산 ---
+    # WALCL, WRESBAL, WTREGEN, MMMFFAQ027S는 Millions(백만) 단위이므로 / 100 을 하면 억(100 Millions) 단위가 됨
+    # RRPONTSYD는 원래 Billions(10억) 단위이므로 * 10 을 하면 억(100 Millions) 단위가 됨
+    if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
+    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
+    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 100
+    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] / 100
+    if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 10
 
     # 2. Yahoo Finance 데이터 가져오기
     tickers = ['^GSPC', '^MOVE']
@@ -88,7 +88,7 @@ def load_data():
     df_merged = df_merged.fillna(0)
     
     # 4. 파생 변수 계산
-    # Net Liquidity = Fed BS - RRP - TGA (모두 실제 달러 단위로 계산됨)
+    # Net Liquidity = Fed BS - RRP - TGA (모두 억 달러 단위로 계산됨)
     if all(col in df_merged.columns for col in ['Fed_BS', 'RRP', 'TGA']):
         df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
     else:
@@ -187,7 +187,7 @@ st.markdown("""
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
     fig_liq.add_trace(
-        plotly_go.Scatter(x=df.index, y=df['Net_Liquidity'], name="US Net Liquidity (달러)", line=dict(color='blue')),
+        plotly_go.Scatter(x=df.index, y=df['Net_Liquidity'], name="US Net Liquidity (억 달러)", line=dict(color='blue')),
         secondary_y=False,
     )
     fig_liq.add_trace(
@@ -195,7 +195,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
         secondary_y=True,
     )
     fig_liq.update_layout(title_text="Net Liquidity vs S&P 500 추이", height=600, hovermode="x unified")
-    fig_liq.update_yaxes(title_text="Net Liquidity (달러)", secondary_y=False)
+    fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
     
     fig_liq.update_xaxes(
@@ -254,7 +254,7 @@ rrp_chg = rrp_val - get_safe_val(prev_week, 'RRP')
 tga_chg = get_safe_val(latest, 'TGA_1W_Chg')
 
 with col_l1:
-    st.metric("연준 대차대조표", f"{fed_bs_val:,.0f} 달러", f"{fed_chg:,.0f} 달러")
+    st.metric("연준 대차대조표", f"{fed_bs_val:,.0f}억 달러", f"{fed_chg:,.0f}억 달러")
     if fed_chg > 0:
         st.caption("🟢 **[유동성 팽창]** 시중에 자금 공급. 증시 우상향 동력")
     elif fed_chg < 0:
@@ -263,7 +263,7 @@ with col_l1:
         st.caption("➖ 변동 없음")
 
 with col_l2:
-    st.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f} 달러", f"{res_chg:,.0f} 달러")
+    st.metric("지급준비금 (Reserves)", f"{reserves_val:,.0f}억 달러", f"{res_chg:,.0f}억 달러")
     if res_chg > 0:
         st.caption("🟢 **[신용 확대]** 은행 대출/투자 여력 증가. 증시 활력 요소")
     elif res_chg < 0:
@@ -272,9 +272,9 @@ with col_l2:
         st.caption("➖ 변동 없음")
 
 with col_l3:
-    st.metric("역레포 (RRP)", f"{rrp_val:,.0f} 달러", f"{rrp_chg:,.0f} 달러")
-    # 실제 달러 기준이므로 1000억 달러 미만인지 검사
-    if rrp_val < 100_000_000_000 and rrp_val > 0.0:
+    st.metric("역레포 (RRP)", f"{rrp_val:,.0f}억 달러", f"{rrp_chg:,.0f}억 달러")
+    # 억 달러 기준 1,000억 달러 미만인지 검사 (100 Billion = 1000 억 달러)
+    if rrp_val < 1000 and rrp_val > 0.0:
         st.caption("⚠️ **[바닥 근접]** RRP를 통한 추가 유동성 공급 한계 임박")
     elif rrp_val == 0.0:
         st.caption("⚠️ **[고갈]** 대기 자금 소진. 추가 유동성 완충재 없음")
@@ -284,7 +284,7 @@ with col_l3:
         st.caption("🟢 **[위험 선호]** 대기 자금이 증시 등 위험 자산으로 이동중")
 
 with col_l4:
-    st.metric("TGA (재무부 계좌)", f"{tga_val:,.0f} 달러", f"{tga_chg:,.0f} 달러")
+    st.metric("TGA (재무부 계좌)", f"{tga_val:,.0f}억 달러", f"{tga_chg:,.0f}억 달러")
     if tga_chg > 0:
         st.caption("🔴 **[자금 흡수]** 세금/국채 발행으로 시중 자금 흡수. 단기 압박")
     elif tga_chg < 0:
@@ -329,8 +329,8 @@ if 'MMF' in df.columns and 'RRP' in df.columns:
     )
     fig_flow.update_xaxes(rangeslider_visible=False, row=2, col=1)
     
-    fig_flow.update_yaxes(title_text="MMF 잔액 (달러)", row=1, col=1)
-    fig_flow.update_yaxes(title_text="RRP 잔액 (달러)", row=2, col=1)
+    fig_flow.update_yaxes(title_text="MMF 잔액 (억 달러)", row=1, col=1)
+    fig_flow.update_yaxes(title_text="RRP 잔액 (억 달러)", row=2, col=1)
 
     st.plotly_chart(fig_flow, use_container_width=True)
 
@@ -381,9 +381,9 @@ def generate_report(latest, prev):
 
     report.append("\n### 📌 유동성 흐름 및 향후 전망")
     if liq_change > 0:
-        report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f} 달러 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
+        report.append(f"- **[긍정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f}억 달러 증가했습니다. 주식 시장에 긍정적인 자금 환경입니다.")
     elif liq_change < 0:
-        report.append(f"- **[부정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f} 달러 감소했습니다. 유동성 축소로 인한 자산 가격 조정에 유의해야 합니다.")
+        report.append(f"- **[부정적]** 지난주 대비 Net Liquidity(순유동성)가 약 {abs(liq_change):,.0f}억 달러 감소했습니다. 유동성 축소로 인한 자산 가격 조정에 유의해야 합니다.")
     else:
         report.append("- 지난주 대비 Net Liquidity(순유동성)의 유의미한 큰 변동은 없습니다.")
         
