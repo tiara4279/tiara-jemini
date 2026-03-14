@@ -11,22 +11,16 @@ import numpy as np
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
 # --- 커스텀 CSS 및 자동 번역 방지 메타 태그 ---
-# 브라우저(크롬 등)가 페이지를 임의로 오역하는 것을 방지 (notranslate 클래스 주입 및 메타 태그)
 st.markdown("""
 <meta name="google" content="notranslate">
+<meta name="robots" content="notranslate">
 <style>
 /* st.metric 의 라벨(제목) 폰트 크기 및 굵기 변경 */
 [data-testid="stMetricLabel"] > div {
     font-size: 20px !important;
     font-weight: 800 !important;
 }
-
-/* 전체 앱 번역 방지 클래스 적용 효과 */
-body {
-    transform: none !important;
-}
 </style>
-<div class="notranslate">
 """, unsafe_allow_html=True)
 
 st.title("🌐 시장 경제 지표 대시보드")
@@ -423,4 +417,3 @@ report_text = generate_report(latest, prev_week)
 st.info(report_text)
 
 st.caption(f"마지막 데이터 업데이트: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
-st.markdown("</div>", unsafe_allow_html=True)
