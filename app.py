@@ -105,7 +105,7 @@ if df.empty or len(df) < 6:
 
 # --- 색상 테마 설정 ---
 COLOR_SAFE = "#1976D2"   # 긍정/안정 (파랑 - 눈 피로 완화)
-COLOR_WARN = "#E65100"   # 주의 (진한 주황 - 가독성 향상)
+COLOR_WARN = "#E67E22"   # 주의 (선명한 귤색/주황색 - 빨강과 명확히 구분됨)
 COLOR_DANGER = "#D32F2F" # 경계/위험 (진한 빨강)
 COLOR_NEUTRAL = "#607D8B" # 중립 (블루 그레이 - 안정의 파랑과 구분)
 
