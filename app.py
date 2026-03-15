@@ -104,10 +104,10 @@ if df.empty or len(df) < 6:
     st.stop()
 
 # --- 색상 테마 설정 ---
-COLOR_SAFE = "#00b894"   # 긍정/안정 (초록)
-COLOR_WARN = "#f39c12"   # 주의 (주황/노랑)
-COLOR_DANGER = "#ff4b4b" # 경계/위험 (빨강)
-COLOR_NEUTRAL = "#0984e3" # 중립 (파랑)
+COLOR_SAFE = "#1976D2"   # 긍정/안정 (파랑 - 눈 피로 완화)
+COLOR_WARN = "#E65100"   # 주의 (진한 주황 - 가독성 향상)
+COLOR_DANGER = "#D32F2F" # 경계/위험 (진한 빨강)
+COLOR_NEUTRAL = "#607D8B" # 중립 (블루 그레이 - 안정의 파랑과 구분)
 
 # --- 지표별 평가 함수 및 메타데이터 ---
 def eval_vix(v, d):
@@ -365,8 +365,8 @@ def render_detailed_indicator(key, df, days):
 st.header("🌊 핵심: 미국 유동성 흐름 (Net Liquidity)")
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#0984e3', width=2.5)), secondary_y=False)
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#ff4b4b', width=1.5)), secondary_y=True)
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#1976D2', width=2.5)), secondary_y=False)
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#D32F2F', width=1.5)), secondary_y=True)
     fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
     fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
@@ -376,7 +376,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
 <div style="font-size: 14.5px; opacity: 0.85; line-height: 1.6;">
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
-통상적으로 <b style="color:#0984e3">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#ff4b4b">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
+통상적으로 <b style="color:#1976D2">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#D32F2F">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
 </div>""", unsafe_allow_html=True)
 
