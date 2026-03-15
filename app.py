@@ -317,50 +317,43 @@ def render_detailed_indicator(key, df, days):
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
-    # 3. 요약 박스 (Summary Box)
-    summary_html = f"""
-    <div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-top: 10px; margin-bottom: 20px;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <span style="background-color: rgba(128,128,128,0.2); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; opacity: 0.8;">최근 {selected_period_label}</span>
-            <span style="background-color: {status_color}20; color: {status_color}; border: 1px solid {status_color}50; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold;">{status_label}</span>
-            <span style="font-size: 26px; font-weight: 900;">{format_val(cur, meta['unit'])}</span>
-        </div>
-        <div style="font-size: 15.5px; margin-bottom: 10px;">
-            <b>{meta['name'].split(' ')[0]} {format_val(cur, meta['unit'])}</b> — {status_text}
-        </div>
-        <div style="font-size: 14px; opacity: 0.85; margin-bottom: 12px;">
-            1주 전({format_val(val_1w, meta['unit'])}) 대비 {chg_1w_html} · 
-            3개월 전({format_val(val_3m, meta['unit'])}) 대비 {chg_3m_html}
-        </div>
-        <div style="font-size: 13px; opacity: 0.6; display: flex; align-items: center; gap: 5px;">
-            📊 최근 {selected_period_label} 구간: 최저 {format_val(sub_df.min(), meta['unit'])} / 최고 {format_val(sub_df.max(), meta['unit'])}
-        </div>
-    </div>
-    """
+    # 3. 요약 박스 (Summary Box) - 들여쓰기 제거
+    summary_html = f"""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-top: 10px; margin-bottom: 20px;">
+<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+<span style="background-color: rgba(128,128,128,0.2); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; opacity: 0.8;">최근 {selected_period_label}</span>
+<span style="background-color: {status_color}20; color: {status_color}; border: 1px solid {status_color}50; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold;">{status_label}</span>
+<span style="font-size: 26px; font-weight: 900;">{format_val(cur, meta['unit'])}</span>
+</div>
+<div style="font-size: 15.5px; margin-bottom: 10px;">
+<b>{meta['name'].split(' ')[0]} {format_val(cur, meta['unit'])}</b> — {status_text}
+</div>
+<div style="font-size: 14px; opacity: 0.85; margin-bottom: 12px;">
+1주 전({format_val(val_1w, meta['unit'])}) 대비 {chg_1w_html} · 3개월 전({format_val(val_3m, meta['unit'])}) 대비 {chg_3m_html}
+</div>
+<div style="font-size: 13px; opacity: 0.6; display: flex; align-items: center; gap: 5px;">
+📊 최근 {selected_period_label} 구간: 최저 {format_val(sub_df.min(), meta['unit'])} / 최고 {format_val(sub_df.max(), meta['unit'])}
+</div>
+</div>"""
     st.markdown(summary_html, unsafe_allow_html=True)
     
-    # 4. 설명 박스 (Explanation Grid)
+    # 4. 설명 박스 (Explanation Grid) - 들여쓰기 제거
     level_cards_html = ""
     for lvl in meta['levels']:
-        level_cards_html += f"""
-        <div style="border: 1px solid rgba(128,128,128,0.15); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 15px; background-color: rgba(128,128,128,0.03);">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                <span style="font-size: 18px;">{lvl[3]}</span>
-                <span style="font-weight: bold; font-size: 14.5px;">{lvl[0]} — <span style="color:{lvl[2]}">{lvl[1]}</span></span>
-            </div>
-            <div style="font-size: 13.5px; opacity: 0.75; line-height: 1.5;">{lvl[4]}</div>
-        </div>
-        """
+        level_cards_html += f"""<div style="border: 1px solid rgba(128,128,128,0.15); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 15px; background-color: rgba(128,128,128,0.03);">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+<span style="font-size: 18px;">{lvl[3]}</span>
+<span style="font-weight: bold; font-size: 14.5px;">{lvl[0]} — <span style="color:{lvl[2]}">{lvl[1]}</span></span>
+</div>
+<div style="font-size: 13.5px; opacity: 0.75; line-height: 1.5;">{lvl[4]}</div>
+</div>"""
         
-    expl_html = f"""
-    <div style="background-color: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 25px; margin-bottom: 60px;">
-        <div style="font-size: 16px; font-weight: bold; margin-bottom: 12px;">📌 {meta['name'].split('(')[0].strip()}란?</div>
-        <div style="font-size: 14.5px; opacity: 0.8; margin-bottom: 22px; line-height: 1.6;">{meta['desc']}</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px;">
-            {level_cards_html}
-        </div>
-    </div>
-    """
+    expl_html = f"""<div style="background-color: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 25px; margin-bottom: 60px;">
+<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px;">📌 {meta['name'].split('(')[0].strip()}란?</div>
+<div style="font-size: 14.5px; opacity: 0.8; margin-bottom: 22px; line-height: 1.6;">{meta['desc']}</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px;">
+{level_cards_html}
+</div>
+</div>"""
     st.markdown(expl_html, unsafe_allow_html=True)
 
 
@@ -379,15 +372,13 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
     st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
     
-    st.markdown("""
-    <div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-bottom: 60px;">
-        <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
-        <div style="font-size: 14.5px; opacity: 0.85; line-height: 1.6;">
-            중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
-            통상적으로 <b style="color:#0984e3">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#ff4b4b">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-bottom: 60px;">
+<div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
+<div style="font-size: 14.5px; opacity: 0.85; line-height: 1.6;">
+중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
+통상적으로 <b style="color:#0984e3">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#ff4b4b">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
+</div>
+</div>""", unsafe_allow_html=True)
 
 
 # --- 1. 시장 리스크 지표 ---
