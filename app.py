@@ -10,28 +10,27 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS 및 자동 번역 방지 메타 태그 ---
+# --- 커스텀 CSS 및 메타 태그 ---
 st.markdown("""
 <meta name="google" content="notranslate">
-<meta name="robots" content="notranslate">
 <style>
-/* 폰트 및 여백 미세조정 */
-div[data-testid="stVerticalBlock"] > div {
-    padding-bottom: 0.5rem;
+/* 탭 및 전반적인 여백 조정 */
+div[data-testid="stTabs"] {
+    margin-top: 20px;
 }
 </style>
 <div class="notranslate">
 """, unsafe_allow_html=True)
 
 st.title("🌐 시장 경제 지표 대시보드")
-st.markdown("시장의 위험 심리, 경기 사이클, 그리고 핵심 유동성 흐름을 매일 추적합니다.")
+st.markdown("시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다.")
 
-# --- 기간 선택 컨트롤 (글로벌) ---
+# --- 기간 선택 컨트롤 ---
 st.markdown("### ⏱️ 추이 기준 기간 선택")
-period_options = {"1개월": 21, "3개월": 63, "6개월": 126, "1년": 252}
-selected_period_label = st.radio("기간", list(period_options.keys()), horizontal=True, label_visibility="collapsed")
+period_options = {"1개월": 21, "3개월": 63, "6개월": 126, "1년": 252, "3년": 756}
+selected_period_label = st.radio("기간", list(period_options.keys()), index=1, horizontal=True, label_visibility="collapsed")
 selected_days = period_options[selected_period_label]
-st.write("") # 간격 띄우기
+st.write("")
 
 # --- 데이터 로드 함수 ---
 @st.cache_data(ttl=3600*12) 
@@ -40,21 +39,10 @@ def load_data():
     start = end - datetime.timedelta(days=365*3) 
     
     fred_series = {
-        'VIX': 'VIXCLS',                  
-        'HY_Spread': 'BAMLH0A0HYM2',      
-        'FSI': 'STLFSI4',                 
-        '10Y_2Y': 'T10Y2Y',               
-        'Fed_BS': 'WALCL',                
-        'Reserves': 'WRESBAL',            
-        'RRP': 'RRPONTSYD',               
-        'TGA': 'WTREGEN',                 
-        'MMF': 'MMMFFAQ027S',             
-        'TOTLL': 'TOTLL',                 
-        'SOFR': 'SOFR',                   
-        'IORB': 'IORB',                   
-        'T10YIE': 'T10YIE',               
-        'Discount_Window': 'WLCFLPCL',    
-        'BTFP': 'H41RESPALBFRB'           
+        'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',               
+        'Fed_BS': 'WALCL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
+        'MMF': 'MMMFFAQ027S', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
+        'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
     }
     
     df_fred = pd.DataFrame()
@@ -101,172 +89,262 @@ def load_data():
     
     return df_merged
 
-with st.spinner('데이터를 분석 중입니다...'):
+with st.spinner('데이터를 수집하고 분석하는 중입니다...'):
     df = load_data()
 
 if df.empty or len(df) < 6:
     st.error("🚨 데이터를 가져오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
 
-# --- 스파크라인 카드 렌더링 함수 ---
-def render_sparkline_card(title, series_col, df, days, is_pct=False, reverse_color=False, status_func=None):
-    if series_col not in df.columns:
-        return
-        
-    sub_df = df[[series_col]].dropna()
-    if len(sub_df) == 0: return
-        
-    sub_df = sub_df.tail(days)
+# --- 지표별 메타데이터 및 분석 로직 설정 ---
+COLOR_SAFE = "#09ab3b" # 초록
+COLOR_WARN = "#f2a900" # 노랑
+COLOR_DANGER = "#ff4b4b" # 빨강
+COLOR_NEUTRAL = "#007bff" # 파랑/중립
+
+def eval_vix(v, d):
+    if v >= 30: return "경계", COLOR_DANGER, "투자자들이 겁먹은 상태입니다. 시장의 극심한 변동성에 대비하세요."
+    elif v >= 20: return "주의", COLOR_WARN, "불확실성이 커지고 있습니다. 포지션을 점검할 때입니다."
+    else: return "안정", COLOR_SAFE, "시장이 조용하고 투자자들이 편안한 상태입니다."
+
+def eval_move(v, d):
+    if v >= 140: return "위험", COLOR_DANGER, "채권 시장이 패닉 상태입니다. 은행/금융 시스템 스트레스를 경계하세요."
+    elif v >= 100: return "주의", COLOR_WARN, "채권 변동성이 높아지고 있습니다."
+    else: return "안정", COLOR_SAFE, "채권 시장이 평온하게 움직이고 있습니다."
+
+def eval_10y2y(v, d):
+    if v < 0: return "침체 경고", COLOR_DANGER, "금리가 역전되었습니다! 과거 경기 침체 전 항상 나타났던 현상입니다."
+    else: return "정상", COLOR_SAFE, "단기 금리가 장기 금리보다 낮은 정상적인 경제 성장 국면입니다."
+
+def eval_fsi(v, d):
+    if v > 0: return "스트레스", COLOR_DANGER, "금융 시스템 내에 자금 경색 등 스트레스 요인이 발생했습니다."
+    else: return "안정", COLOR_SAFE, "금융 시스템이 원활하게 작동하고 있습니다."
+
+def eval_hy(v, d):
+    if v >= 5.0: return "경고", COLOR_DANGER, "정크본드 금리가 급등하며 신용 경색 조짐이 보입니다."
+    elif v >= 4.0: return "주의", COLOR_WARN, "기업들의 자금 조달 여건이 빡빡해지고 있습니다."
+    else: return "안정", COLOR_SAFE, "하이일드 채권 시장이 안정적이며 신용 위험이 낮습니다."
+
+def eval_fed(v, d):
+    if d > 0: return "팽창", COLOR_SAFE, "연준이 자산을 늘리며 시중에 유동성을 공급하고 있습니다."
+    else: return "긴축(QT)", COLOR_DANGER, "연준이 자산을 축소하며 시중의 유동성을 흡수하고 있습니다."
+
+def eval_reserves(v, d):
+    if d > 0: return "확대", COLOR_SAFE, "은행들의 자금 여력이 늘어나 대출과 투자가 원활해집니다."
+    else: return "축소", COLOR_DANGER, "은행들의 자금 여력이 줄어들어 신용 공급이 둔화될 수 있습니다."
+
+def eval_rrp(v, d):
+    if v == 0: return "고갈", COLOR_DANGER, "역레포 대기 자금이 완전히 소진되어 추가 유동성 완충재가 없습니다."
+    elif v < 1000: return "바닥 근접", COLOR_WARN, "증시를 밀어올리던 잉여 자금이 거의 바닥을 드러내고 있습니다."
+    elif d > 0: return "위험 회피", COLOR_DANGER, "시중 자금이 연준 금고(역레포)로 대피하고 있습니다."
+    else: return "위험 선호", COLOR_SAFE, "역레포 자금이 방출되며 증시 등 실물로 흘러가고 있습니다."
+
+def eval_tga(v, d):
+    if d > 0: return "자금 흡수", COLOR_DANGER, "재무부가 국채 발행/세금으로 시중 자금을 블랙홀처럼 흡수 중입니다."
+    else: return "재정 지출", COLOR_SAFE, "재무부가 예산을 집행하며 시중에 자금을 펌핑하고 있습니다."
+
+def eval_mmf(v, d):
+    if d > 0: return "자금 이탈", COLOR_WARN, "투자자들이 주식을 팔고 안전한 단기 현금성 자산(MMF)으로 피신 중입니다."
+    else: return "위험 선호", COLOR_SAFE, "MMF 자금이 빠져나와 주식 등 위험 자산으로 이동 중입니다."
+
+def eval_totll(v, d):
+    if d > 0: return "신용 팽창", COLOR_SAFE, "상업은행 대출이 늘어나 실물 경제에 자금이 잘 돌고 있습니다."
+    else: return "신용 축소", COLOR_DANGER, "상업은행이 대출 문턱을 높여 실물 경제 자금줄이 마르고 있습니다."
+
+def eval_sofr(v, d):
+    if v > 0.05: return "발작 조짐", COLOR_DANGER, "기준금리(IORB)보다 시장금리(SOFR)가 비쌉니다. 달러 구하기가 힘듭니다!"
+    elif v > 0: return "타이트", COLOR_WARN, "단기 자금 시장의 달러 유동성이 빠듯해지고 있습니다."
+    else: return "안정", COLOR_SAFE, "단기 레포 시장에서 달러 융통이 원활하게 이루어지고 있습니다."
+
+def eval_emerg(v, d):
+    if v > 500: return "위기", COLOR_DANGER, "은행들이 연준에서 긴급 자금을 대거 빌려가고 있습니다. 뱅크런 우려!"
+    elif v > 0: return "주의", COLOR_WARN, "일부 은행이 연준의 긴급 차입(할인창구 등)을 이용했습니다."
+    else: return "안정", COLOR_SAFE, "은행 시스템이 건강하여 연준의 긴급 대출을 쓰지 않고 있습니다."
+
+def eval_dxy(v, d):
+    if v >= 105: return "강세", COLOR_DANGER, "달러가 강해지며 신흥국 자본 이탈 및 글로벌 유동성 축소가 우려됩니다."
+    elif v < 100: return "약세", COLOR_SAFE, "달러 약세로 글로벌 증시와 위험 자산에 우호적인 환경입니다."
+    else: return "중립", COLOR_NEUTRAL, "달러가 박스권에서 안정적으로 유지되고 있습니다."
+
+def eval_bei(v, d):
+    if v >= 2.5: return "물가 불안", COLOR_DANGER, "인플레이션 고착화 우려로 연준의 금리 인하가 지연될 수 있습니다."
+    elif v <= 2.0: return "디스인플레", COLOR_WARN, "경기 둔화 및 침체 우려가 부각되는 구간입니다."
+    else: return "골디락스", COLOR_SAFE, "연준의 물가 목표치(2%) 근방에서 안정적으로 움직이고 있습니다."
+
+INDICATOR_META = {
+    'VIX': {'name': 'VIX 공포지수', 'unit': 'pt', 'desc': '시장이 앞으로 얼마나 출렁일지 예상하는 지수입니다. 투자자들의 불안감을 숫자로 표현합니다.', 'eval': eval_vix, 'levels': [("20 미만", "안정", COLOR_SAFE, "😌", "시장이 조용하고 투자자들이 편안한 상태"), ("20~30", "주의", COLOR_WARN, "🙄", "불확실성이 커지는 구간. 변동성 유의"), ("30 이상", "경계", COLOR_DANGER, "😱", "과거 주요 시장 충격 때 항상 넘었던 공포 구간")]},
+    'MOVE': {'name': 'MOVE 채권 변동성 지수', 'unit': 'pt', 'desc': '미국 국채 시장의 변동성을 보여주는 채권판 VIX입니다. 주식보다 채권 발작이 시스템 위기를 더 잘 잡아냅니다.', 'eval': eval_move, 'levels': [("100 미만", "안정", COLOR_SAFE, "😌", "채권 시장 평온"), ("100~140", "주의", COLOR_WARN, "⚠️", "채권 금리 급등락. 유동성 주의"), ("140 이상", "위험", COLOR_DANGER, "🚨", "시스템 리스크 및 금융 위기 징후")]},
+    '10Y_2Y': {'name': '장단기 금리차 (10Y-2Y)', 'unit': '%', 'desc': '미국 10년물 국채와 2년물 국채의 금리 차이입니다. 경제의 미래 전망을 가장 정확히 예측하는 선행지표입니다.', 'eval': eval_10y2y, 'levels': [("0% 이상", "정상", COLOR_SAFE, "📈", "장기 금리가 더 높은 건강한 경제 성장 구간"), ("0% 미만", "침체 경고", COLOR_DANGER, "📉", "금리 역전 현상. 역대 모든 경기침체 전 발생")]},
+    'FSI': {'name': '금융 스트레스 지수 (FSI)', 'unit': 'pt', 'desc': '18개 금융 시장 지표를 종합하여 미국 금융 시스템의 전반적인 스트레스 수준을 측정합니다.', 'eval': eval_fsi, 'levels': [("0 미만", "안정", COLOR_SAFE, "✅", "금융 시스템 원활"), ("0 이상", "스트레스", COLOR_DANGER, "💥", "평균 이상의 시스템 긴장 상태")]},
+    'HY_Spread': {'name': '하이일드 스프레드', 'unit': '%', 'desc': '안전한 국채와 위험한 정크본드(하이일드) 간의 금리 격차입니다. 신용 경색을 파악하는 핵심입니다.', 'eval': eval_hy, 'levels': [("4% 미만", "안정", COLOR_SAFE, "👍", "기업들 자금 조달 원활"), ("4~5%", "주의", COLOR_WARN, "🤔", "신용 경계감 상승"), ("5% 이상", "경고", COLOR_DANGER, "🔥", "자금줄이 마르고 기업 부도 위험 상승")]},
+    
+    'Fed_BS': {'name': '연준 대차대조표 총자산', 'unit': '억 달러', 'desc': '연준(Fed)이 찍어내어 보유하고 있는 자산의 총합입니다. 시중에 풀린 본원 통화의 양을 의미합니다.', 'eval': eval_fed, 'levels': [("상승 (QE)", "팽창", COLOR_SAFE, "💸", "시중에 자금을 쏟아내어 증시 상승 압력"), ("하락 (QT)", "긴축", COLOR_DANGER, "🧽", "시중의 달러를 흡수하여 자산 가격 조정 압력")]},
+    'Reserves': {'name': '지급준비금 (Reserves)', 'unit': '억 달러', 'desc': '상업은행들이 연준에 맡겨둔 대기 자금입니다. 은행이 실물 경제에 신용을 공급할 수 있는 체력입니다.', 'eval': eval_reserves, 'levels': [("상승", "확대", COLOR_SAFE, "🏦", "은행 대출 및 자산 매입 여력 증가"), ("하락", "축소", COLOR_DANGER, "🏜️", "유동성이 줄어들며 시장 변동성 확대 대비")]},
+    'RRP': {'name': '역레포 잔액 (RRP)', 'unit': '억 달러', 'desc': '시중의 남아도는 단기 잉여 자금이 연준 창고로 들어간 금액입니다. 증시를 방어하는 유동성 완충재 역할을 합니다.', 'eval': eval_rrp, 'levels': [("방출 (감소)", "위험 선호", COLOR_SAFE, "🌊", "연준 창고에서 돈이 나와 실물/증시로 유입"), ("흡수 (증가)", "위험 회피", COLOR_DANGER, "🔒", "시장 불안으로 단기 자금이 연준으로 피신"), ("0 근접", "고갈", COLOR_WARN, "🪫", "충격을 흡수할 대기 자금 바닥 임박")]},
+    'TGA': {'name': '재무부 계좌 (TGA)', 'unit': '억 달러', 'desc': '미국 정부의 마이너스 통장입니다. 세금을 걷거나 국채를 발행하면 여기에 돈이 쌓입니다.', 'eval': eval_tga, 'levels': [("잔액 감소", "재정 지출", COLOR_SAFE, "🚀", "정부가 예산을 집행하여 시중에 돈을 뿌림"), ("잔액 증가", "자금 흡수", COLOR_DANGER, "🕳️", "세금/국채로 시중 유동성을 빨아들여 단기 악재")]},
+    
+    'TOTLL': {'name': 'H.8 상업은행 총대출', 'unit': '억 달러', 'desc': '미국 상업은행들이 기업과 가계에 실제로 빌려준 대출 총액입니다. 실물 경제의 핏줄입니다.', 'eval': eval_totll, 'levels': [("대출 증가", "신용 팽창", COLOR_SAFE, "🟢", "경제가 활력을 띠고 자금이 원활히 공급됨"), ("대출 감소", "신용 축소", COLOR_DANGER, "🔴", "은행 대출 태도 강화(Credit Crunch), 침체 전조")]},
+    'SOFR_IORB_Spread': {'name': '단기 조달 스프레드 (SOFR-IORB)', 'unit': '%', 'desc': '은행간 하루짜리 조달금리(SOFR)에서 연준 예치금리(IORB)를 뺀 값입니다. 단기 자금시장의 발작 여부를 측정합니다.', 'eval': eval_sofr, 'levels': [("0% 이하", "안정", COLOR_SAFE, "😌", "단기 시장 달러 넘침. 조달 원활"), ("0~0.05%", "주의", COLOR_WARN, "⚡", "레포 시장 유동성 약간 빡빡함"), ("0.05% 이상", "발작", COLOR_DANGER, "💥", "극심한 달러 가뭄 현상")]},
+    'Emergency_Loans': {'name': '연준 H.4.1 긴급대출 총액', 'unit': '억 달러', 'desc': '위기에 처한 은행들이 연준의 할인창구나 BTFP를 통해 긴급하게 빌려간 자금입니다.', 'eval': eval_emerg, 'levels': [("0 근접", "안정", COLOR_SAFE, "🏥", "위기 없음. 은행들 자체 조달 원활"), ("수백억 달러", "뱅크런 경고", COLOR_DANGER, "🚑", "일부 은행 유동성 위기 발생 (SVB 사태 등)")]},
+    'MMF': {'name': 'MMF 총 잔액', 'unit': '억 달러', 'desc': '언제든 현금화할 수 있는 머니마켓펀드 총액입니다. 기관/개인 대기 자금의 규모를 보여줍니다.', 'eval': eval_mmf, 'levels': [("잔액 감소", "위험 선호", COLOR_SAFE, "💸", "안전자산에서 돈을 빼서 주식 등 위험자산 투자"), ("잔액 증가", "자금 대피", COLOR_WARN, "🛡️", "시장 하락을 우려해 단기 현금으로 파킹 중")]},
+    
+    'DXY': {'name': 'DXY 달러 인덱스', 'unit': 'pt', 'desc': '주요 6개국 통화 대비 미국 달러의 가치입니다. 글로벌 유동성 환경을 좌우합니다.', 'eval': eval_dxy, 'levels': [("100 미만", "약세", COLOR_SAFE, "📉", "달러 약세. 신흥국 및 위험자산 랠리에 유리"), ("100~105", "중립", COLOR_NEUTRAL, "⚖️", "안정적인 박스권 유지"), ("105 이상", "강세", COLOR_DANGER, "📈", "글로벌 유동성 흡수, 신흥국 증시 부담 작용")]},
+    'T10YIE': {'name': '10년물 기대인플레이션 (BEI)', 'unit': '%', 'desc': '채권 시장이 예상하는 향후 10년간의 평균 인플레이션율입니다.', 'eval': eval_bei, 'levels': [("2.0% 미만", "디스인플레", COLOR_WARN, "❄️", "침체 및 디플레이션 우려 반영"), ("2.0~2.5%", "골디락스", COLOR_SAFE, "🎯", "연준의 2% 목표 부합. 가장 안정적"), ("2.5% 이상", "인플레 고착화", COLOR_DANGER, "🔥", "고물가 지속 우려. 연준 금리 인하 지연")]}
+}
+
+# --- 공통 포맷팅 헬퍼 ---
+def format_val(v, unit):
+    if unit == '%': return f"{v:.3f}%" if "SOFR" in unit else f"{v:.2f}%"
+    if unit == 'pt': return f"{v:.2f}"
+    if unit == '억 달러': return f"{v:,.0f}억 달러"
+    return str(v)
+
+def format_chg(v, unit, is_sofr=False):
+    prefix = "▲" if v > 0 else "▼" if v < 0 else "-"
+    v_abs = abs(v)
+    if unit == '%': return f"{prefix}{v_abs:.3f}%p" if is_sofr else f"{prefix}{v_abs:.2f}%p"
+    if unit == 'pt': return f"{prefix}{v_abs:.2f}"
+    if unit == '억 달러': return f"{prefix}{v_abs:,.0f}억 달러"
+    return str(v)
+
+def hex_to_rgba(hex_color, alpha=0.15):
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f'rgba({r},{g},{b},{alpha})'
+
+# --- 프리미엄 디테일 카드 렌더링 함수 ---
+def render_premium_card(key, df, days):
+    if key not in df.columns: return
+    config = INDICATOR_META[key]
+    
+    sub_df = df[key].dropna().tail(days)
     if len(sub_df) < 2: return
     
-    current_val = sub_df.iloc[-1, 0]
-    start_val = sub_df.iloc[0, 0]
-    delta_val = current_val - start_val
+    cur = sub_df.iloc[-1]
+    val_1w = sub_df.iloc[-min(6, len(sub_df))] # 약 1주(5영업일) 전
     
-    pct_chg = (delta_val / start_val * 100) if start_val != 0 else 0.0
+    # 3개월 전 (approx 63일)
+    hist_df = df[key].dropna()
+    val_3m = hist_df.tail(min(63, len(hist_df))).iloc[0]
     
-    # 오르면 나쁜 지표(reverse_color=True)는 빨간색, 오르면 좋은 지표는 초록색
-    if delta_val > 0:
-        color_hex = "#ff4b4b" if reverse_color else "#09ab3b" 
-        color_name = "red" if reverse_color else "green"
-    elif delta_val < 0:
-        color_hex = "#09ab3b" if reverse_color else "#ff4b4b"
-        color_name = "green" if reverse_color else "red"
-    else:
-        color_hex = "#7f7f7f"
-        color_name = "gray"
+    chg_1w = cur - val_1w
+    chg_3m = cur - val_3m
+    
+    status_label, status_color, status_text = config['eval'](cur, chg_1w)
+    
+    # Plotly Chart
+    fig = plotly_go.Figure()
+    fig.add_trace(plotly_go.Scatter(
+        x=sub_df.index, y=sub_df, mode='lines',
+        line=dict(color=status_color, width=2.5),
+        fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)
+    ))
+    fig.update_layout(
+        height=220, margin=dict(l=0, r=0, t=10, b=0),
+        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', visible=False),
+        yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right'),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False
+    )
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    
+    # HTML Component
+    chg_color = "#ff4b4b" if chg_1w > 0 else "#09ab3b"
+    if "Fed" in key or "Reserves" in key or "TOTLL" in key: chg_color = "#09ab3b" if chg_1w > 0 else "#ff4b4b"
+    if chg_1w == 0: chg_color = "gray"
+    
+    is_sofr = (key == 'SOFR_IORB_Spread')
+    
+    level_cards_html = ""
+    for lvl in config['levels']:
+        level_cards_html += f"""
+        <div style="flex: 1; min-width: 220px; background: rgba(128,128,128,0.04); border: 1px solid rgba(128,128,128,0.1); border-left: 4px solid {lvl[2]}; padding: 15px; border-radius: 8px;">
+            <div style="font-weight: bold; font-size: 15px; margin-bottom: 6px;">{lvl[3]} {lvl[0]} — <span style="color:{lvl[2]}">{lvl[1]}</span></div>
+            <div style="font-size: 13px; color: #888;">{lvl[4]}</div>
+        </div>
+        """
         
-    with st.container(border=True):
-        st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#555;'>{title}</div>", unsafe_allow_html=True)
+    html = f"""
+    <div style="background: rgba(128,128,128,0.03); border: 1px solid rgba(128,128,128,0.15); border-radius: 12px; padding: 20px; margin-bottom: 30px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="background: {status_color}; color: white; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; letter-spacing: 0.5px;">{status_label}</span>
+            <span style="font-size: 30px; font-weight: 800; letter-spacing: -0.5px;">{format_val(cur, config['unit'])}</span>
+        </div>
+        <div style="font-size: 16px; font-weight: bold; margin-bottom: 8px; color: {status_color};">{config['name']} — <span style="color: inherit; font-weight: normal;">{status_text}</span></div>
+        <div style="font-size: 14px; color: #777; margin-bottom: 25px;">
+            1주 전 대비 <span style="color: {chg_color}; font-weight:bold;">{format_chg(chg_1w, config['unit'], is_sofr)}</span> · 3개월 전 대비 {format_chg(chg_3m, config['unit'], is_sofr)}
+            <div style="font-size:12.5px; margin-top:6px;">📊 최근 {selected_days}일 기준 구간: 최저 {format_val(sub_df.min(), config['unit'])} / 최고 {format_val(sub_df.max(), config['unit'])}</div>
+        </div>
         
-        # 포맷팅
-        if is_pct:
-            val_str = f"{current_val:.3f}%" if "SOFR" in title else f"{current_val:.2f}%"
-            delta_str = f"{delta_val:+.3f}%p" if "SOFR" in title else f"{delta_val:+.2f}%p"
-        elif "DXY" in title or "FSI" in title or "VIX" in title or "MOVE" in title:
-            val_str = f"{current_val:.2f}"
-            delta_str = f"{delta_val:+.2f}"
-        else:
-            val_str = f"{current_val:,.0f}억 달러"
-            delta_str = f"{delta_val:+,.0f}억 달러"
-            
-        st.markdown(f"<h3 style='margin:0; padding:0; font-size:26px;'>{val_str}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<div style='color:{color_name}; font-weight:bold; font-size:13px; margin-bottom:10px;'>변동: {delta_str} ({pct_chg:+.2f}%)</div>", unsafe_allow_html=True)
-        
-        # Plotly 미니 차트 (스파크라인)
-        def hex_to_rgba(hex_color, alpha=0.15):
-            hex_color = hex_color.lstrip('#')
-            r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-            return f'rgba({r},{g},{b},{alpha})'
-            
-        fig = plotly_go.Figure(plotly_go.Scatter(
-            x=sub_df.index, y=sub_df.iloc[:, 0],
-            mode='lines+markers',
-            line=dict(color=color_hex, width=2),
-            marker=dict(size=3, color=color_hex),
-            fill='tozeroy', fillcolor=hex_to_rgba(color_hex)
-        ))
-        fig.update_layout(
-            height=70, margin=dict(l=0, r=0, t=0, b=0),
-            xaxis=dict(visible=False, showgrid=False), yaxis=dict(visible=False, showgrid=False),
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False
-        )
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        if status_func:
-            st.caption(status_func(current_val, delta_val))
+        <div style="border-top: 1px solid rgba(128,128,128,0.15); padding-top: 20px;">
+            <div style="font-size: 17px; font-weight: bold; margin-bottom: 12px;">📌 {config['name']}란?</div>
+            <div style="font-size: 14.5px; color: #999; margin-bottom: 18px; line-height: 1.5;">{config['desc']}</div>
+            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                {level_cards_html}
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
-# 상태 체크 헬퍼 함수들
-def check_status(value, threshold, condition, danger_msg, safe_msg):
-    if condition == 'greater' and value > threshold: return f"🔴 {danger_msg}"
-    elif condition == 'less' and value < threshold: return f"🔴 {danger_msg}"
-    else: return f"🟢 {safe_msg}"
-
-# --- 1. 시장 리스크 경고 시스템 ---
-st.header("🚨 1. 시장 리스크 경고 시스템")
-c1 = st.columns(5)
-with c1[0]: render_sparkline_card("VIX (옵션 변동성)", 'VIX', df, selected_days, reverse_color=True, status_func=lambda v, d: check_status(v, 30, 'greater', '시장 공포 극대화', '안정적'))
-with c1[1]: render_sparkline_card("MOVE (채권 변동성)", 'MOVE', df, selected_days, reverse_color=True, status_func=lambda v, d: check_status(v, 140, 'greater', '채권 시스템 스트레스', '안정적'))
-with c1[2]: render_sparkline_card("10Y-2Y 금리차", '10Y_2Y', df, selected_days, is_pct=True, reverse_color=False, status_func=lambda v, d: check_status(v, 0, 'less', '장단기 금리 역전', '정상'))
-with c1[3]: render_sparkline_card("금융 스트레스 (FSI)", 'FSI', df, selected_days, reverse_color=True, status_func=lambda v, d: check_status(v, 0, 'greater', '금융 시스템 스트레스', '유동성 원활'))
-with c1[4]: render_sparkline_card("하이일드 스프레드", 'HY_Spread', df, selected_days, is_pct=True, reverse_color=True, status_func=lambda v, d: check_status(v, 5.0, 'greater', '신용 경색 경보', '안정적'))
-
-st.divider()
-
-# --- 2. 핵심 유동성 흐름 분석 ---
-st.header("🌊 2. 미국 유동성 흐름 (핵심)")
+# --- 상단 Hero 차트 (Net Liquidity vs SP500) ---
+st.header("🌊 핵심 유동성 지표 (Net Liquidity)")
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="US Net Liquidity (억 달러)", line=dict(color='blue')), secondary_y=False)
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='red', width=2)), secondary_y=True)
-    fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label} 추이)", height=500, hovermode="x unified", margin=dict(t=50, b=0))
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#007bff', width=2.5)), secondary_y=False)
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#ff4b4b', width=1.5)), secondary_y=True)
+    fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
     fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
-    st.plotly_chart(fig_liq, use_container_width=True)
+    st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
+    
+    st.markdown("""
+    <div style="background: rgba(128,128,128,0.05); padding: 15px; border-radius: 10px; font-size:14px; margin-bottom: 30px;">
+        💡 <b>Net Liquidity(순유동성)</b>은 연준의 대차대조표에서 RRP와 TGA를 뺀 값으로, 실제 시중에 공급된 순수 유동성을 뜻합니다. 파란선(유동성)이 오르면 빨간선(주가)도 오르는 강한 상관관계를 가집니다.
+    </div>
+    """, unsafe_allow_html=True)
 
-st.subheader("📊 주요 유동성 창구 증감")
-c2 = st.columns(4)
-with c2[0]: render_sparkline_card("연준 대차대조표", 'Fed_BS', df, selected_days, reverse_color=False, status_func=lambda v, d: "🟢 [유동성 팽창] 자금 공급" if d > 0 else ("🔴 [QT 진행] 자산 축소" if d < 0 else "➖ 변동 없음"))
-with c2[1]: render_sparkline_card("지급준비금 (Reserves)", 'Reserves', df, selected_days, reverse_color=False, status_func=lambda v, d: "🟢 [신용 확대] 은행 여력 증가" if d > 0 else ("🔴 [신용 축소] 은행 여력 감소" if d < 0 else "➖ 변동 없음"))
-with c2[2]: render_sparkline_card("역레포 (RRP)", 'RRP', df, selected_days, reverse_color=True, status_func=lambda v, d: "⚠️ [바닥 근접] 완충재 고갈 임박" if v < 1000 and v > 0 else ("🔴 [위험 회피] 자금 연준 회귀" if d > 0 else "🟢 [위험 선호] 자금 증시 이동"))
-with c2[3]: render_sparkline_card("TGA (재무부 계좌)", 'TGA', df, selected_days, reverse_color=True, status_func=lambda v, d: "🔴 [자금 흡수] 국채발행 등 흡수" if d > 0 else ("🟢 [재정 지출] 시중 자금 펌핑" if d < 0 else "➖ 변동 없음"))
+# --- 탭을 활용한 카테고리별 디테일 카드 배치 ---
+tab1, tab2, tab3, tab4 = st.tabs(["🚨 시장 리스크 지표", "🏦 유동성 창구", "💰 신용 및 자금시장", "🌍 글로벌 매크로"])
 
-st.divider()
+with tab1:
+    st.markdown("#### 핵심 위험 관리 지표")
+    render_premium_card('VIX', df, selected_days)
+    render_premium_card('MOVE', df, selected_days)
+    render_premium_card('10Y_2Y', df, selected_days)
+    render_premium_card('HY_Spread', df, selected_days)
+    render_premium_card('FSI', df, selected_days)
 
-# --- 3. [신규] 은행 신용 & 단기 자금시장 (H.8 & SOFR) ---
-st.header("🏦 3. 신용 창출 및 단기 자금시장 (H.8 & SOFR)")
-st.markdown("상업은행의 실제 신용 창출 여부와 단기 달러 자금 시장의 발작(스트레스) 여부를 진단합니다.")
-c3 = st.columns(3)
-with c3[0]: 
-    render_sparkline_card("H.8 상업은행 총대출", 'TOTLL', df, selected_days, reverse_color=False, status_func=lambda v, d: "🟢 [신용 팽창] 실물 경제 자금 공급" if d > 0 else ("🔴 [신용 축소] 대출 태도 강화" if d < 0 else "➖ [대출 정체] 규모 유지"))
-with c3[1]: 
-    # SOFR 상태 설명 명확화
-    def sofr_status(v, d):
-        if v == 0.0: return "🟢 [정상] 기준금리와 조달금리 일치"
-        elif v > 0.05: return "🔴 [경고] 단기 자금 달러 부족(발작 조짐)"
-        elif v > 0: return "⚠️ [주의] 레포 시장 유동성 타이트"
-        else: return "🟢 [안정] 단기 자금 조달 매우 원활"
-    render_sparkline_card("SOFR - IORB 스프레드", 'SOFR_IORB_Spread', df, selected_days, is_pct=True, reverse_color=True, status_func=sofr_status)
-with c3[2]: 
-    render_sparkline_card("연준 H.4.1 긴급대출", 'Emergency_Loans', df, selected_days, reverse_color=True, status_func=lambda v, d: "🔴 [위험] 뱅크런 징후 발생" if v > 500 else ("⚠️ [주의] 연준 긴급 차입 발생" if v > 0 else "🟢 [매우 안정] 시스템 위기 없음(대출 0)"))
+with tab2:
+    st.markdown("#### 유동성을 좌우하는 3대 창구")
+    render_premium_card('Fed_BS', df, selected_days)
+    render_premium_card('Reserves', df, selected_days)
+    render_premium_card('RRP', df, selected_days)
+    render_premium_card('TGA', df, selected_days)
 
-st.divider()
+with tab3:
+    st.markdown("#### 실물 경제 신용 및 조달 스트레스")
+    render_premium_card('TOTLL', df, selected_days)
+    render_premium_card('SOFR_IORB_Spread', df, selected_days)
+    render_premium_card('Emergency_Loans', df, selected_days)
+    render_premium_card('MMF', df, selected_days)
 
-# --- 4. [신규] 글로벌 달러 및 인플레이션 (DXY & BEI) ---
-st.header("🌍 4. 글로벌 유동성 및 인플레이션 (DXY & BEI)")
-c4 = st.columns(2)
-with c4[0]: 
-    render_sparkline_card("DXY (달러 인덱스)", 'DXY', df, selected_days, reverse_color=True, status_func=lambda v, d: "🔴 [달러 강세] 글로벌 유동성 흡수" if v > 105 else ("🟢 [달러 약세] 위험자산 우호적" if v < 100 else "➖ [중립] 박스권 안정세"))
-with c4[1]: 
-    render_sparkline_card("10Y BEI (기대인플레이션)", 'T10YIE', df, selected_days, is_pct=True, reverse_color=True, status_func=lambda v, d: "🔴 [물가 불안] 인플레 고착화 우려" if v > 2.5 else ("⚠️ [디스인플레] 경기 둔화 우려" if v < 2.0 else "🟢 [골디락스] 물가 안정화"))
-
-st.divider()
-
-# --- 5. 자금 이동 (MMF vs RRP) ---
-st.header("🔄 5. 기관 자금 이동 (MMF vs 역레포)")
-if 'MMF' in df.columns and 'RRP' in df.columns:
-    fig_flow = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("MMF 총 잔액 추이", "역레포(RRP) 잔액 추이"))
-    fig_flow.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['MMF'].tail(selected_days), name="MMF", fill='tozeroy', line=dict(color='purple')), row=1, col=1)
-    fig_flow.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['RRP'].tail(selected_days), name="RRP", fill='tozeroy', line=dict(color='orange')), row=2, col=1)
-    fig_flow.update_layout(height=500, hovermode="x unified", showlegend=False, margin=dict(t=30, b=0))
-    fig_flow.update_xaxes(rangeslider_visible=False, row=1, col=1)
-    fig_flow.update_xaxes(rangeslider_visible=False, row=2, col=1)
-    st.plotly_chart(fig_flow, use_container_width=True)
+with tab4:
+    st.markdown("#### 인플레이션 및 글로벌 자금 흐름")
+    render_premium_card('DXY', df, selected_days)
+    render_premium_card('T10YIE', df, selected_days)
 
 st.divider()
 
 # --- 6. AI 기반 종합 시황 리포트 ---
-st.header("📝 6. AI 기반 매크로 종합 시황 리포트")
+st.header("📝 AI 기반 매크로 종합 시황 리포트")
 def generate_report(df, days):
     sub_df = df.tail(days)
     if len(sub_df) < 2: return "데이터가 충분하지 않습니다."
     
-    latest = sub_df.iloc[-1]
-    start = sub_df.iloc[0]
-    
+    latest, start = sub_df.iloc[-1], sub_df.iloc[0]
     def safe(row, col): return row[col] if col in row.index else 0.0
     
-    vix, move, fsi = safe(latest, 'VIX'), safe(latest, 'MOVE'), safe(latest, 'FSI')
+    vix, move = safe(latest, 'VIX'), safe(latest, 'MOVE')
     yield_curve, hy_spread = safe(latest, '10Y_2Y'), safe(latest, 'HY_Spread')
     liq_change = safe(latest, 'Net_Liquidity') - safe(start, 'Net_Liquidity')
     sofr_spread = safe(latest, 'SOFR_IORB_Spread')
