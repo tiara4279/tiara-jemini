@@ -166,6 +166,10 @@ def eval_emerg(v, d):
     elif v > 0: return "주의", COLOR_WARN, "일부 은행이 연준의 긴급 차입을 이용했습니다. 국지적인 스트레스가 있습니다."
     else: return "매우 안정", COLOR_SAFE, "은행 시스템이 건강하여 연준의 긴급 대출 잔액이 '0'입니다. 완벽히 정상입니다."
 
+def eval_mmf(v, d):
+    if d > 0: return "자금 대피", COLOR_WARN, "시장 불안으로 투자자들이 단기 현금(MMF)으로 피신 중입니다."
+    else: return "위험 선호", COLOR_SAFE, "MMF 대기 자금이 주식 등 위험 자산으로 유입되고 있습니다."
+
 def eval_dxy(v, d):
     if v >= 105: return "강세", COLOR_DANGER, "강달러 현상으로 신흥국 자본 이탈 및 글로벌 유동성 축소가 우려됩니다."
     elif v < 100: return "약세", COLOR_SAFE, "달러 약세로 글로벌 증시와 위험 자산 랠리에 매우 우호적인 환경입니다."
