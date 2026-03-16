@@ -324,9 +324,10 @@ def render_detailed_indicator(key, df, days):
         yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right'),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False
     )
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    # st.plotly_chart 사용시 key 값을 주어 중복 ID 에러 방지
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{key}")
     
-    # 3. 요약 박스 (Summary Box)
+    # 3. 요약 박스 (Summary Box) - 들여쓰기 제거
     summary_html = f"""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-top: 10px; margin-bottom: 20px;">
 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
 <span style="background-color: rgba(128,128,128,0.2); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; opacity: 0.8;">최근 {selected_period_label}</span>
@@ -345,7 +346,7 @@ def render_detailed_indicator(key, df, days):
 </div>"""
     st.markdown(summary_html, unsafe_allow_html=True)
     
-    # 4. 설명 박스 (Explanation Grid)
+    # 4. 설명 박스 (Explanation Grid) - 들여쓰기 제거
     level_cards_html = ""
     for lvl in meta['levels']:
         level_cards_html += f"""<div style="border: 1px solid rgba(128,128,128,0.15); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 15px; background-color: rgba(128,128,128,0.03);">
@@ -379,7 +380,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
     fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
-    st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False}, key="net_liq_chart")
     
     st.markdown("""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-bottom: 60px;">
 <div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
