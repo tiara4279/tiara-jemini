@@ -47,7 +47,7 @@ def load_data():
     
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',               
-        'Fed_BS': 'WALCL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
+        'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
         'MMF': 'MMMFFAQ027S', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
         'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
     }
@@ -62,6 +62,7 @@ def load_data():
 
     # 단위 환산 (억 달러)
     if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
+    if 'WRESBAL_Ind' in df_fred.columns: df_fred['WRESBAL_Ind'] = df_fred['WRESBAL_Ind'] / 100
     if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
     if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 100
     if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] / 100
@@ -200,9 +201,14 @@ INDICATOR_META = {
     'Fed_BS': {'name': '연준 대차대조표 총자산', 'unit': '억 달러', 'inverted': False, 'meta': '단위: 억 달러 · 주간 · 상승 = 유동성 공급', 
                'desc': '미국 중앙은행(Fed)이 돈을 찍어내어 보유하고 있는 자산의 총합입니다. 이 숫자가 커지면 시중에 돈을 푸는 것(양적완화)이고, 작아지면 돈을 거둬들이는 것(양적긴축)입니다.', 
                'eval': eval_fed, 'levels': [("상승 (QE)", "팽창", COLOR_SAFE, "💸", "시중에 자금을 쏟아내어 증시와 위험자산에 강한 상승 압력 제공."), ("하락 (QT)", "긴축", COLOR_DANGER, "🧽", "시중의 달러를 흡수하여 자산 가격의 상단을 제한하고 조정을 유발.")]},
+    
+    'WRESBAL_Ind': {'name': 'WRESBAL (은행이 연준에 들고 있는 준비금)', 'unit': '억 달러', 'inverted': False, 'meta': '단위: 억 달러 · 주간 · 상승 = 유동성 공급', 
+                    'desc': '상업은행들이 대출 등 각종 의무를 다하고도 남아서 연방준비제도(Fed) 계좌에 예치해둔 실제 준비금 잔액입니다. 이 자금이 넉넉해야 은행들이 안심하고 시장에 신용(대출)을 풀 수 있어 증시 유동성의 핵심 연료로 불립니다.', 
+                    'eval': eval_reserves, 'levels': [("잔액 증가", "확대", COLOR_SAFE, "🏦", "은행의 자금 여력이 증가하여 대출과 투자가 원활해지는 긍정적 환경."), ("잔액 감소", "축소", COLOR_DANGER, "🏜️", "유동성이 마르기 시작하여 시장 변동성 확대 및 신용 경색 대비 필요.")]},
     'Reserves': {'name': '지급준비금 (Reserves)', 'unit': '억 달러', 'inverted': False, 'meta': '단위: 억 달러 · 주간 · 실제 금융권 유동성 체력', 
                  'desc': '상업은행들이 대출을 내주기 위해 연준 금고에 예치해둔 대기 자금입니다. 은행이 실물 경제와 주식 시장에 신용을 공급할 수 있는 핵심 체력입니다.', 
                  'eval': eval_reserves, 'levels': [("상승/유지", "확대", COLOR_SAFE, "🏦", "은행의 자금 여력이 증가하여 대출과 투자가 원활해지는 긍정적 환경."), ("하락", "축소", COLOR_DANGER, "🏜️", "유동성이 마르기 시작하여 시장 변동성 확대 및 신용 경색 대비 필요.")]},
+    
     'RRP': {'name': '역레포 잔액 (RRP)', 'unit': '억 달러', 'inverted': True, 'meta': '단위: 억 달러 · 일간 · 하락 = 증시로 자금 유입', 
             'desc': '시중에 갈 곳을 잃은 단기 잉여 자금이 연준 창고로 들어간 금액입니다. 이 잔액이 줄어든다는 것은 돈이 창고에서 빠져나와 주식이나 채권 시장(실물)으로 흘러가고 있다는 좋은 신호입니다.', 
             'eval': eval_rrp, 'levels': [("방출 (감소)", "위험 선호", COLOR_SAFE, "🌊", "대기 자금이 연준 창고에서 나와 실물 및 증시로 유입되는 강세 요인."), ("흡수 (증가)", "위험 회피", COLOR_DANGER, "🔒", "시장 불안으로 시중 자금이 다시 연준 금고로 피신하는 약세 요인."), ("0 근접", "고갈 경고", COLOR_WARN, "🪫", "충격을 흡수해 주던 대기 자금이 바닥나 유동성 절벽 우려.")]},
@@ -293,7 +299,10 @@ def render_detailed_indicator(key, df, days):
     chg_3m_html, _ = format_chg_text(cur, val_3m, meta['unit'], is_inverted, is_sofr)
     
     # 1. 헤더 (타이틀 및 메타 정보)
-    st.markdown(f"<h3 style='margin-bottom: 5px;'>{meta['name']}</h3>", unsafe_allow_html=True)
+    if 'top_text' in meta:
+        st.markdown(f"<div style='color: #607D8B; font-size: 14px; font-weight: bold; margin-bottom: 2px;'>{meta['top_text']}</div>", unsafe_allow_html=True)
+    
+    st.markdown(f"<h3 style='margin-bottom: 5px; margin-top: 0px;'>{meta['name']}</h3>", unsafe_allow_html=True)
     st.markdown(f"<div style='color: #888; font-size: 14px; margin-bottom: 15px;'>{meta['meta']}</div>", unsafe_allow_html=True)
     
     # 2. Plotly 차트
@@ -317,7 +326,7 @@ def render_detailed_indicator(key, df, days):
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
-    # 3. 요약 박스 (Summary Box) - 들여쓰기 제거
+    # 3. 요약 박스 (Summary Box)
     summary_html = f"""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-top: 10px; margin-bottom: 20px;">
 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
 <span style="background-color: rgba(128,128,128,0.2); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; opacity: 0.8;">최근 {selected_period_label}</span>
@@ -336,7 +345,7 @@ def render_detailed_indicator(key, df, days):
 </div>"""
     st.markdown(summary_html, unsafe_allow_html=True)
     
-    # 4. 설명 박스 (Explanation Grid) - 들여쓰기 제거
+    # 4. 설명 박스 (Explanation Grid)
     level_cards_html = ""
     for lvl in meta['levels']:
         level_cards_html += f"""<div style="border: 1px solid rgba(128,128,128,0.15); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 15px; background-color: rgba(128,128,128,0.03);">
@@ -392,8 +401,9 @@ render_detailed_indicator('FSI', df, selected_days)
 
 # --- 2. 유동성 창구 지표 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("🏦 2. 유동성을 좌우하는 핵심 3대 창구")
+st.header("🏦 2. 유동성을 좌우하는 핵심 창구")
 render_detailed_indicator('Fed_BS', df, selected_days)
+render_detailed_indicator('WRESBAL_Ind', df, selected_days)
 render_detailed_indicator('Reserves', df, selected_days)
 render_detailed_indicator('TGA', df, selected_days)
 
