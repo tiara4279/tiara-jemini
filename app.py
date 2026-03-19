@@ -83,7 +83,7 @@ def load_data():
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
         'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
-        'MMF': 'WRMFNS', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
+        'MMF': 'WRMFNS', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB', 'EFFR': 'EFFR',                  
         'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
     }
     
@@ -119,7 +119,6 @@ def load_data():
     df_merged = pd.concat([df_fred, df_yf], axis=1).ffill().bfill().fillna(0)
     
     # --- 강건한(Robust) 데이터 계산 로직 ---
-    # 누락된 컬럼이 있어도 에러가 나지 않도록 개별 확인 후 계산
     fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
     rrp = df_merged['RRP'] if 'RRP' in df_merged.columns else 0.0
     tga = df_merged['TGA'] if 'TGA' in df_merged.columns else 0.0
@@ -127,7 +126,9 @@ def load_data():
     
     sofr = df_merged['SOFR'] if 'SOFR' in df_merged.columns else 0.0
     iorb = df_merged['IORB'] if 'IORB' in df_merged.columns else 0.0
+    effr = df_merged['EFFR'] if 'EFFR' in df_merged.columns else 0.0
     df_merged['SOFR_IORB_Spread'] = sofr - iorb
+    df_merged['SOFR_EFFR_Spread'] = sofr - effr
     
     dw = df_merged['Discount_Window'] if 'Discount_Window' in df_merged.columns else 0.0
     btfp = df_merged['BTFP'] if 'BTFP' in df_merged.columns else 0.0
@@ -201,6 +202,11 @@ def eval_sofr(v, d):
     elif v > 0: return "타이트", COLOR_WARN, "단기 자금 시장의 달러 유동성이 빠듯해지고 있습니다."
     else: return "안정", COLOR_SAFE, "0% 부근에서 단기 레포 시장의 달러 융통이 원활하게 이루어지고 있습니다."
 
+def eval_sofr_effr(v, d):
+    if v >= 0.05: return "경색 경고", COLOR_DANGER, "담보 금리(SOFR)가 무담보 금리(EFFR)를 크게 상회하며 단기 자금 시장에 심각한 경색이 발생했습니다."
+    elif v > 0: return "주의", COLOR_WARN, "레포 시장의 달러 유동성이 타이트해지며 조달 비용이 상승하고 있습니다."
+    else: return "안정", COLOR_SAFE, "단기 자금 조달 시장이 안정적으로 작동하고 있습니다."
+
 def eval_emerg(v, d):
     if v > 500: return "위기", COLOR_DANGER, "은행들이 연준에서 긴급 자금을 대거 빌려가고 있습니다. 뱅크런이나 유동성 위기를 경고합니다!"
     elif v > 0: return "주의", COLOR_WARN, "일부 은행이 연준의 긴급 차입을 이용했습니다. 국지적인 스트레스가 있습니다."
@@ -258,9 +264,15 @@ INDICATOR_META = {
     'TOTLL': {'name': 'H.8 상업은행 총대출', 'short_name': '상업은행 총대출', 'unit': '억 달러', 'inverted': False, 'meta': '단위: 억 달러 · 주간 · 실물 경제 신용 공급 지표', 
               'desc': '미국 내 상업은행들이 기업과 가계에 실제로 빌려준 대출의 총액입니다. 거시 경제의 핏줄과 같으며, 이 수치가 늘어나야 실물 경제가 성장합니다.', 
               'eval': eval_totll, 'levels': [("대출 증가", "신용 팽창", COLOR_SAFE, "🟢", "경제가 활력을 띠고 가계와 기업으로 자금이 원활히 공급됩니다."), ("대출 감소", "신용 축소", COLOR_DANGER, "🔴", "은행이 대출 문턱을 높인 상태(Credit Crunch)로 강력한 경기 침체 전조증상입니다.")]},
+    
     'SOFR_IORB_Spread': {'name': '단기 조달 스프레드 (SOFR - IORB)', 'short_name': '조달 스프레드', 'unit': '%', 'inverted': True, 'meta': '단위: % · 일간 · 0.05% 이상 = 단기 자금 발작', 
                          'desc': '은행간 하루짜리 실제 조달금리(SOFR)에서 연준이 보장하는 예치금리(IORB)를 뺀 값입니다. 이 값이 0보다 커진다는 것은 시장에서 달러 구하기가 연준 기준보다 비싸졌다는 뜻으로, 단기 유동성 발작을 나타냅니다.', 
                          'eval': eval_sofr, 'levels': [("0% 이하", "안정", COLOR_SAFE, "😌", "단기 자금 시장에 달러가 풍부하여 조달이 매우 원활한 상태입니다."), ("0 ~ 0.05%", "주의", COLOR_WARN, "⚡", "레포 시장의 유동성이 타이트해지며 경계감이 형성되는 구간입니다."), ("0.05% 이상", "발작 경고", COLOR_DANGER, "💥", "단기 자금 시장에 극심한 달러 가뭄 현상이 발생하여 연준의 개입이 필요합니다.")]},
+    
+    'SOFR_EFFR_Spread': {'name': 'SOFR / EFFR 스프레드', 'short_name': 'SOFR-EFFR', 'unit': '%', 'inverted': True, 'meta': '단위: % · 일간 · 0.05% 이상 = 경색 경고', 
+                         'desc': '국채를 담보로 돈을 빌리는 금리(SOFR)와 은행 간 무담보로 돈을 빌리는 금리(EFFR)의 차이입니다. 보통 담보 대출이 더 싸기 때문에 음수(-)이거나 0 근처여야 정상이나, 레포 시장에 현금이 마르면 이 수치가 양수(+)로 급등하게 됩니다.', 
+                         'eval': eval_sofr_effr, 'levels': [("0% 이하", "안정", COLOR_SAFE, "😌", "단기 자금 시장에 달러가 풍부하여 정상적으로 작동 중입니다."), ("0 ~ 0.05%", "주의", COLOR_WARN, "⚡", "담보 조달 비용이 무담보 조달 비용보다 비싸지는 기현상이 발생하기 시작했습니다."), ("0.05% 이상", "경계", COLOR_DANGER, "💥", "레포 시장에 현금 가뭄 현상이 발생해 시스템 리스크가 커지고 있습니다.")]},
+
     'Emergency_Loans': {'name': '연준 긴급대출 총액 (할인창구 + BTFP)', 'short_name': '긴급대출 잔액', 'unit': '억 달러', 'inverted': True, 'meta': '단위: 억 달러 · 주간 · 은행 시스템 위기 지표', 
                         'desc': '유동성 위기에 처한 은행들이 연준의 비상 창구(Discount Window)나 BTFP 프로그램을 통해 긴급하게 빌려간 구제 자금의 총합입니다. 정상적인 은행은 낙인효과 때문에 이 돈을 쓰지 않습니다.', 
                         'eval': eval_emerg, 'levels': [("0 (또는 극소액)", "안정", COLOR_SAFE, "🏥", "위기 징후 없음. 모든 은행들이 시장에서 자체적으로 자금 조달이 가능합니다."), ("수백억 달러 급등", "위기 발생", COLOR_DANGER, "🚑", "일부 은행권에 심각한 뱅크런이나 유동성 위기가 발생했습니다(예: SVB 사태).")]},
@@ -320,7 +332,7 @@ def render_detailed_indicator(key, df, days):
     chg_1w = cur - val_1w
     status_label, status_color, status_text = meta['eval'](cur, chg_1w)
     
-    is_sofr = (key == 'SOFR_IORB_Spread')
+    is_sofr = (key in ['SOFR_IORB_Spread', 'SOFR_EFFR_Spread'])
     is_inverted = meta['inverted']
     
     chg_1w_html, _ = format_chg_text(cur, val_1w, meta['unit'], is_inverted, is_sofr)
@@ -383,6 +395,7 @@ def render_detailed_indicator(key, df, days):
     if key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
     elif key == 'MOVE': fig.add_hline(y=140, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
     elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
+    elif key == 'SOFR_EFFR_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
     
     fig.update_layout(
         template="plotly_dark",
@@ -491,6 +504,7 @@ render_detailed_indicator('RRP', df, selected_days)
 render_detailed_indicator('MMF', df, selected_days)
 render_detailed_indicator('TOTLL', df, selected_days)
 render_detailed_indicator('SOFR_IORB_Spread', df, selected_days)
+render_detailed_indicator('SOFR_EFFR_Spread', df, selected_days)
 render_detailed_indicator('Emergency_Loans', df, selected_days)
 
 st.markdown("<hr>", unsafe_allow_html=True)
