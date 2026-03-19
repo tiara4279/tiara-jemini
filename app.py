@@ -876,6 +876,35 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 </div>
 </div>""".replace('\n', ''), unsafe_allow_html=True)
 
+# --- 미국 10년물 국채금리 분해 (Decomposition) ---
+st.markdown("<hr>", unsafe_allow_html=True)
+custom_header("🇺🇸", "미국 10년물 국채금리 분해 (Decomposition)", "국채금리를 '단기금리 기대경로', '기대인플레이션', '기간 프리미엄'으로 분해하여 시장의 진짜 의도를 파악합니다.")
+
+if all(col in df.columns for col in ['10Y', 'T10YIE', 'ACMTP10']):
+    # 단기금리 기대경로 (Short Rate) = 10년물 금리 - 기대인플레 - 기간프리미엄
+    short_rate = df['10Y'] - df['T10YIE'] - df['ACMTP10']
+
+    fig_decomp = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # 좌축 (Left Axis)
+    fig_decomp.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['10Y'].tail(selected_days), name="US 10 Year (좌)", line=dict(color='#3b82f6', width=2.5)), secondary_y=False)
+    fig_decomp.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=short_rate.tail(selected_days), name="Short Rate (좌)", line=dict(color='#7dd3fc', width=2)), secondary_y=False)
+    fig_decomp.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['T10YIE'].tail(selected_days), name="10 Year EI Rate (좌)", line=dict(color='#94a3b8', width=2)), secondary_y=False)
+    
+    # 우축 (Right Axis)
+    fig_decomp.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['ACMTP10'].tail(selected_days), name="10 Year TP (우)", line=dict(color='#f97316', width=2)), secondary_y=True)
+
+    fig_decomp.update_layout(
+        height=450, hovermode="x unified", margin=dict(t=30, b=0, l=10, r=10),
+        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='rgba(255,255,255,0.7)'))
+    )
+    fig_decomp.update_yaxes(title_text="금리 (%)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.05)', title_font=dict(color='rgba(255,255,255,0.6)'), tickfont=dict(color='rgba(255,255,255,0.5)'))
+    fig_decomp.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, showgrid=False, title_font=dict(color='rgba(255,255,255,0.6)'), tickfont=dict(color='rgba(255,255,255,0.5)'))
+    fig_decomp.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='rgba(255,255,255,0.5)'))
+    
+    st.plotly_chart(fig_decomp, use_container_width=True, config={'displayModeBar': False})
+
 
 st.markdown("<hr>", unsafe_allow_html=True)
 custom_header("🚨", "1. 시장 리스크 및 스트레스 지표", "시장의 공포 심리와 시스템 위기 가능성을 경고합니다.")
