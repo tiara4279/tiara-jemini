@@ -888,11 +888,13 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     # [차트 높이 2배 증대 (360px -> 600px)]
     fig_liq.update_layout(
         title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", 
+        title_font=dict(color='#fef08a'),  # 차트 제목 색상 연노랑으로 변경
         height=600, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10),
         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='#fef08a')),
         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='#fef08a')),
-        yaxis2=dict(showgrid=False, tickfont=dict(color='#fef08a'))
+        yaxis2=dict(showgrid=False, tickfont=dict(color='#fef08a')),
+        legend=dict(font=dict(color='#fef08a'))  # 우측 범례 텍스트 색상 연노랑으로 변경
     )
     fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False, title_font=dict(color='#fef08a'))
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True, title_font=dict(color='#fef08a'))
