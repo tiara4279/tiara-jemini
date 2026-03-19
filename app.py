@@ -306,12 +306,10 @@ def render_detailed_indicator(key, df, days):
         try:
             val_10y = df['10Y'].dropna().iloc[-1]
             val_2y = df['2Y'].dropna().iloc[-1]
-            extra_info_html = f"""
-            <div style="font-size: 14.5px; background-color: rgba(128,128,128,0.1); padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(128,128,128,0.15);">
-                💡 <b>상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
-                따라서 두 금리의 차이(10년물 - 2년물)는 <b>{cur:.2f}%</b>가 됩니다.
-            </div>
-            """
+            extra_info_html = f"""<div style="font-size: 14.5px; background-color: rgba(128,128,128,0.1); padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(128,128,128,0.15);">
+💡 <b>상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
+따라서 두 금리의 차이(10년물 - 2년물)는 <b>{cur:.2f}%</b>가 됩니다.
+</div>"""
         except:
             pass
     
@@ -324,11 +322,33 @@ def render_detailed_indicator(key, df, days):
     
     # 2. Plotly 차트
     fig = plotly_go.Figure()
-    fig.add_trace(plotly_go.Scatter(
-        x=sub_df.index, y=sub_df, mode='lines',
-        line=dict(color=status_color, width=2.5),
-        fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)
-    ))
+    
+    is_10y2y = (key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns)
+    
+    if is_10y2y:
+        # 10년물 국채 금리 (파란색)
+        fig.add_trace(plotly_go.Scatter(
+            x=sub_df.index, y=df['10Y'].tail(days), mode='lines',
+            name='10년물 금리', line=dict(color='#2196F3', width=1.5), opacity=0.8
+        ))
+        # 2년물 국채 금리 (빨간색)
+        fig.add_trace(plotly_go.Scatter(
+            x=sub_df.index, y=df['2Y'].tail(days), mode='lines',
+            name='2년물 금리', line=dict(color='#F44336', width=1.5), opacity=0.8
+        ))
+        # 장단기 금리차 (연두색)
+        fig.add_trace(plotly_go.Scatter(
+            x=sub_df.index, y=sub_df, mode='lines',
+            name='금리차(10Y-2Y)', line=dict(color='#8BC34A', width=3.5),
+            fill='tozeroy', fillcolor=hex_to_rgba('#8BC34A', 0.15)
+        ))
+    else:
+        fig.add_trace(plotly_go.Scatter(
+            x=sub_df.index, y=sub_df, mode='lines',
+            line=dict(color=status_color, width=2.5),
+            fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)
+        ))
+
     # 차트 기준선 추가 로직 (VIX 30, MOVE 100, 금리차 0 등)
     if key == '10Y_2Y': fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     elif key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="red", opacity=0.3)
@@ -336,10 +356,13 @@ def render_detailed_indicator(key, df, days):
     elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     
     fig.update_layout(
-        height=280, margin=dict(l=0, r=0, t=10, b=0),
+        height=280, 
+        margin=dict(l=0, r=0, t=30 if is_10y2y else 10, b=0),
         xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)'),
         yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right'),
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+        showlegend=is_10y2y,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1) if is_10y2y else None
     )
     # st.plotly_chart 사용시 key 값을 주어 중복 ID 에러 방지
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{key}")
