@@ -45,8 +45,10 @@ def load_data():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
+    # 10Y(DGS10)와 2Y(DGS2) 개별 데이터 수집 추가
     fred_series = {
-        'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',               
+        'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
+        '10Y': 'DGS10', '2Y': 'DGS2',
         'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
         'MMF': 'MMMFFAQ027S', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
         'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
@@ -297,6 +299,21 @@ def render_detailed_indicator(key, df, days):
     
     chg_1w_html, _ = format_chg_text(cur, val_1w, meta['unit'], is_inverted, is_sofr)
     chg_3m_html, _ = format_chg_text(cur, val_3m, meta['unit'], is_inverted, is_sofr)
+
+    # (신규) 장단기 금리차의 경우 10년물/2년물 현재 금리를 보여주는 특별 알림 추가
+    extra_info_html = ""
+    if key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns:
+        try:
+            val_10y = df['10Y'].dropna().iloc[-1]
+            val_2y = df['2Y'].dropna().iloc[-1]
+            extra_info_html = f"""
+            <div style="font-size: 14.5px; background-color: rgba(128,128,128,0.1); padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(128,128,128,0.15);">
+                💡 <b>상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
+                따라서 두 금리의 차이(10년물 - 2년물)는 <b>{cur:.2f}%</b>가 됩니다.
+            </div>
+            """
+        except:
+            pass
     
     # 1. 헤더 (타이틀 및 메타 정보)
     if 'top_text' in meta:
@@ -337,6 +354,7 @@ def render_detailed_indicator(key, df, days):
 <div style="font-size: 15.5px; margin-bottom: 10px;">
 <b>{meta['short_name']} {format_val(cur, meta['unit'], is_sofr)}</b> — {status_text}
 </div>
+{extra_info_html}
 <div style="font-size: 14px; opacity: 0.85; margin-bottom: 12px;">
 1주 전({format_val(val_1w, meta['unit'], is_sofr)}) 대비 {chg_1w_html} · 3개월 전({format_val(val_3m, meta['unit'], is_sofr)}) 대비 {chg_3m_html}
 </div>
