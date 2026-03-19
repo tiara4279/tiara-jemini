@@ -92,14 +92,16 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
-# --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
+# --- CNN Fear & Greed 데이터 실시간 로드 함수 (헤더 우회 강화) ---
 @st.cache_data(ttl=3600*2)
 def fetch_real_fng():
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
         headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://edition.cnn.com/",
+            "Origin": "https://edition.cnn.com",
         }
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=5) as response:
@@ -742,19 +744,29 @@ if all(c in df_raw.columns for c in req_cols):
     v_hy = get_last_two(df_raw['HY_Spread'])
     v_fsi = get_last_two(df_raw['FSI'])
     
-    # 공포탐욕지수 (CNN 실제 데이터 호출, 실패시 VIX 역산 추정치로 Fallback)
+    # 공포탐욕지수 (CNN 실제 데이터 호출, 실패시 SP500+VIX+HY 역산 초정밀 추정치로 Fallback)
     real_fng = fetch_real_fng()
     if real_fng is not None:
         fng_score = real_fng
         fng_desc = "CNN Fear & Greed"
     else:
-        fng_score = int(max(0, min(100, 100 - (v_vix[-1] - 12) * 4)))
+        if 'SP500' in df_raw.columns and len(df_raw['SP500'].dropna()) > 125:
+            sp500_close = df_raw['SP500'].dropna().iloc[-1]
+            sp500_125ma = df_raw['SP500'].dropna().tail(125).mean()
+            mom_score = (sp500_close / sp500_125ma - 1) * 100
+            mom_norm = np.clip(50 + mom_score * 12, 0, 100)
+        else:
+            mom_norm = 50
+        vix_norm = np.clip(100 - (v_vix[-1] - 12) * 5, 0, 100)
+        hy_norm = np.clip(100 - (v_hy[-1] - 3.0) * 15, 0, 100)
+        
+        fng_score = int(round(mom_norm * 0.5 + vix_norm * 0.3 + hy_norm * 0.2))
         fng_desc = "CNN Fear & Greed (Proxy)"
         
     if fng_score <= 24: fng_state, fng_col = "극단적 공포 · extreme fear", COLOR_DANGER
     elif fng_score <= 44: fng_state, fng_col = "공포 · fear", COLOR_WARN
     elif fng_score <= 55: fng_state, fng_col = "중립 · neutral", COLOR_NEUTRAL
-    elif fng_score <= 75: fng_state, fng_col = "탐욕 · greed", COLOR_SAFE
+    elif fng_score <= 74: fng_state, fng_col = "탐욕 · greed", COLOR_SAFE
     else: fng_state, fng_col = "극단적 탐욕 · extreme greed", COLOR_SAFE
     
     fng_diff_data = (fng_state, fng_col)
