@@ -92,6 +92,22 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
+# --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
+@st.cache_data(ttl=3600*2)
+def fetch_real_fng():
+    try:
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return int(round(data['fear_and_greed']['score']))
+    except Exception:
+        return None
+
 # --- 데이터 로드 함수 (강건한 결측치 처리 적용) ---
 @st.cache_data(ttl=3600*12) 
 def load_data():
@@ -148,7 +164,7 @@ def load_data():
     # 차트 렌더링용 채우기 (ffill) 적용된 데이터
     df_merged = df_raw.ffill().bfill().fillna(0)
     
-    # --- 강건한(Robust) 데이터 계산 로직 ---
+    # --- 강건한(Robust) 데이터 계산 로직 (df_merged용) ---
     fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
     rrp = df_merged['RRP'] if 'RRP' in df_merged.columns else 0.0
     tga = df_merged['TGA'] if 'TGA' in df_merged.columns else 0.0
@@ -163,6 +179,23 @@ def load_data():
     dw = df_merged['Discount_Window'] if 'Discount_Window' in df_merged.columns else 0.0
     btfp = df_merged['BTFP'] if 'BTFP' in df_merged.columns else 0.0
     df_merged['Emergency_Loans'] = dw + btfp
+
+    # --- 핵심! 요약 보드 그리기용(df_raw) 파생 지표 채우기 ---
+    # 이 부분이 누락되어 요약 보드가 나타나지 않았습니다.
+    fed_bs_raw = df_raw['Fed_BS'] if 'Fed_BS' in df_raw.columns else 0.0
+    rrp_raw = df_raw['RRP'] if 'RRP' in df_raw.columns else 0.0
+    tga_raw = df_raw['TGA'] if 'TGA' in df_raw.columns else 0.0
+    df_raw['Net_Liquidity'] = fed_bs_raw - rrp_raw - tga_raw
+    
+    sofr_raw = df_raw['SOFR'] if 'SOFR' in df_raw.columns else 0.0
+    iorb_raw = df_raw['IORB'] if 'IORB' in df_raw.columns else 0.0
+    effr_raw = df_raw['EFFR'] if 'EFFR' in df_raw.columns else 0.0
+    df_raw['SOFR_IORB_Spread'] = sofr_raw - iorb_raw
+    df_raw['SOFR_EFFR_Spread'] = sofr_raw - effr_raw
+    
+    dw_raw = df_raw['Discount_Window'] if 'Discount_Window' in df_raw.columns else 0.0
+    btfp_raw = df_raw['BTFP'] if 'BTFP' in df_raw.columns else 0.0
+    df_raw['Emergency_Loans'] = dw_raw + btfp_raw
     
     return df_merged, df_raw
 
@@ -703,12 +736,34 @@ req_cols = ['VIX', 'MOVE', '10Y_2Y', 'HY_Spread', 'FSI', 'Fed_BS', 'Reserves', '
 
 if all(c in df_raw.columns for c in req_cols):
     
-    # [1] 시장 리스크 및 스트레스 지표 그룹 데이터 추출 (안전한 스케일 적용 헬퍼 사용)
+    # [1] 시장 리스크 및 스트레스 지표 그룹 데이터 추출
     v_vix = get_last_two(df_raw['VIX'])
     v_move = get_last_two(df_raw['MOVE'])
     v_10y2y = get_last_two(df_raw['10Y_2Y'])
     v_hy = get_last_two(df_raw['HY_Spread'])
     v_fsi = get_last_two(df_raw['FSI'])
+    
+    # 공포탐욕지수 (CNN 실제 데이터 호출, 실패시 VIX 역산 추정치로 Fallback)
+    real_fng = fetch_real_fng()
+    if real_fng is not None:
+        fng_score = real_fng
+        fng_desc = "CNN Fear & Greed"
+    else:
+        fng_score = int(max(0, min(100, 100 - (v_vix[-1] - 12) * 4)))
+        fng_desc = "CNN Fear & Greed (Proxy)"
+        
+    if fng_score <= 24: fng_state, fng_col = "극단적 공포 · extreme fear", COLOR_DANGER
+    elif fng_score <= 44: fng_state, fng_col = "공포 · fear", COLOR_WARN
+    elif fng_score <= 55: fng_state, fng_col = "중립 · neutral", COLOR_NEUTRAL
+    elif fng_score <= 75: fng_state, fng_col = "탐욕 · greed", COLOR_SAFE
+    else: fng_state, fng_col = "극단적 탐욕 · extreme greed", COLOR_SAFE
+    
+    fng_diff_data = (fng_state, fng_col)
+    
+    v_dxy = get_last_two(df_raw['DXY'])
+    v_jpy = get_last_two(df_raw['USDJPY'])
+    v_10y = get_last_two(df_raw['10Y'])
+    v_wti = get_last_two(df_raw['WTI'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
@@ -733,11 +788,24 @@ if all(c in df_raw.columns for c in req_cols):
         '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">1. 시장 리스크 및 스트레스 지표</div>',
         '</div>',
         '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
-        render_mini_card("VIX 공포지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "클릭하여 상세 차트 보기", "#f97316", "VIX"),
+        render_mini_card("VIX 공포지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "VIX"),
         render_mini_card("MOVE 채권 변동성", f"{v_move[-1]:.2f}", make_diff_str(v_move[-1], v_move[-2], invert=True), "클릭하여 상세 차트 보기", "#f97316", "MOVE"),
         render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "클릭하여 상세 차트 보기", "#f97316", "10Y_2Y"),
         render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#f97316", "HY_Spread"),
         render_mini_card("금융 스트레스 지수", f"{v_fsi[-1]:.2f}", make_diff_str(v_fsi[-1], v_fsi[-2], invert=True), "클릭하여 상세 차트 보기", "#f97316", "FSI"),
+        '</div></div>',
+
+        # --- 매크로 지표 ---
+        '<div style="margin-bottom: 2rem;">',
+        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
+        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(168,85,247,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🌐</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">글로벌 매크로</div>',
+        '</div>',
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
+        render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY"),
+        render_mini_card("달러/엔", f"{v_jpy[-1]:.1f}엔", make_diff_str(v_jpy[-1], v_jpy[-2], unit='엔', invert=True), "엔화 강세/약세", "#a855f7"),
+        render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7"),
+        render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7"),
         '</div></div>',
 
         # --- Group 2: 유동성을 좌우하는 핵심 창구 ---
