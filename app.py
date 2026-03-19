@@ -181,7 +181,6 @@ def load_data():
     df_merged['Emergency_Loans'] = dw + btfp
 
     # --- 핵심! 요약 보드 그리기용(df_raw) 파생 지표 채우기 ---
-    # 이 부분이 누락되어 요약 보드가 나타나지 않았습니다.
     fed_bs_raw = df_raw['Fed_BS'] if 'Fed_BS' in df_raw.columns else 0.0
     rrp_raw = df_raw['RRP'] if 'RRP' in df_raw.columns else 0.0
     tga_raw = df_raw['TGA'] if 'TGA' in df_raw.columns else 0.0
@@ -292,8 +291,8 @@ def eval_bei(v, d):
     else: return "골디락스", COLOR_SAFE, "연준의 물가 목표치(2%) 근방에서 안정적으로 움직이는 최고의 상태입니다."
 
 INDICATOR_META = {
-    'VIX': {'name': 'VIX 공포지수', 'short_name': 'VIX', 'unit': 'pt', 'inverted': True, 'meta': '단위: 포인트 · 일간 · 20 이상 = 주의 / 30 이상 = 경계', 
-            'desc': '시장이 앞으로 얼마나 출렁일지 예상하는 지수입니다. 쉽게 말해 투자자들의 불안감을 숫자로 표현한 것으로, 주가가 급락할 때 VIX는 급등합니다.', 
+    'VIX': {'name': 'VIX 변동성 지수', 'short_name': 'VIX', 'unit': 'pt', 'inverted': True, 'meta': '단위: 포인트 · 일간 · 20 이상 = 주의 / 30 이상 = 경계', 
+            'desc': '시장이 앞으로 얼마나 출렁일지 예상하는 지수입니다. 주가가 급락할 때 VIX는 급등합니다.', 
             'eval': eval_vix, 'levels': [("20 미만", "안정", COLOR_SAFE, "😌", "시장이 조용하고 투자자들이 편안한 상태입니다. 주식 등 위험자산 선호."), ("20~30", "주의", COLOR_WARN, "🙄", "불확실성이 커지는 구간입니다. 변동성이 높아질 수 있어 조심할 필요가 있습니다."), ("30 이상", "경계", COLOR_DANGER, "😱", "투자자들이 겁먹은 상태입니다. 과거 주요 시장 충격 때 항상 이 구간을 넘었습니다.")]},
     'MOVE': {'name': 'MOVE 채권 변동성 지수', 'short_name': 'MOVE', 'unit': 'pt', 'inverted': True, 'meta': '단위: 포인트 · 일간 · 100 이상 = 주의', 
              'desc': '미국 국채 시장의 변동성을 보여주는 채권판 VIX입니다. 주식 시장의 공포지수보다 채권 시장의 발작이 거시적 금융 위기를 훨씬 더 빨리, 정확하게 잡아냅니다.', 
@@ -403,7 +402,7 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (줄바꿈 모두 제거하여 에러 원천 차단)
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id=""):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
@@ -761,7 +760,6 @@ if all(c in df_raw.columns for c in req_cols):
     fng_diff_data = (fng_state, fng_col)
     
     v_dxy = get_last_two(df_raw['DXY'])
-    v_jpy = get_last_two(df_raw['USDJPY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
     
@@ -781,38 +779,27 @@ if all(c in df_raw.columns for c in req_cols):
     board_html = ''.join([
         '<div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">',
         
-        # --- Group 1: 시장 리스크 및 스트레스 지표 ---
+        # --- Group 1: 시장 동향 및 매크로 (Merged) ---
         '<div style="margin-bottom: 2rem;">',
         '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
-        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🚨</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">1. 시장 리스크 및 스트레스 지표</div>',
+        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>',
         '</div>',
         '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
-        render_mini_card("VIX 공포지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "VIX"),
-        render_mini_card("MOVE 채권 변동성", f"{v_move[-1]:.2f}", make_diff_str(v_move[-1], v_move[-2], invert=True), "클릭하여 상세 차트 보기", "#f97316", "MOVE"),
-        render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "클릭하여 상세 차트 보기", "#f97316", "10Y_2Y"),
-        render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#f97316", "HY_Spread"),
-        render_mini_card("금융 스트레스 지수", f"{v_fsi[-1]:.2f}", make_diff_str(v_fsi[-1], v_fsi[-2], invert=True), "클릭하여 상세 차트 보기", "#f97316", "FSI"),
-        '</div></div>',
-
-        # --- 매크로 지표 ---
-        '<div style="margin-bottom: 2rem;">',
-        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
-        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(168,85,247,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🌐</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">글로벌 매크로</div>',
-        '</div>',
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
+        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", ""),
+        render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX"),
+        render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y"),
+        render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread"),
         render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY"),
-        render_mini_card("달러/엔", f"{v_jpy[-1]:.1f}엔", make_diff_str(v_jpy[-1], v_jpy[-2], unit='엔', invert=True), "엔화 강세/약세", "#a855f7"),
-        render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7"),
-        render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7"),
+        render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y"),
+        render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", ""),
         '</div></div>',
 
         # --- Group 2: 유동성을 좌우하는 핵심 창구 ---
         '<div style="margin-bottom: 2rem;">',
         '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
         '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🏦</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">2. 유동성을 좌우하는 핵심 창구</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">유동성을 좌우하는 핵심 창구</div>',
         '</div>',
         '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
         render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Fed_BS"),
@@ -824,7 +811,7 @@ if all(c in df_raw.columns for c in req_cols):
         '<div>',
         '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
         '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(16,185,129,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💰</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">3. 은행 신용 및 단기 자금 시장</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">은행 신용 및 단기 자금 시장</div>',
         '</div>',
         '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
         render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "클릭하여 상세 차트 보기", "#10b981", "RRP"),
