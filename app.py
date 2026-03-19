@@ -83,7 +83,7 @@ def load_data():
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
         'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
-        'MMF': 'MMMFFAQ027S', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
+        'MMF': 'WRMFSL', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB',                   
         'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
     }
     
@@ -99,7 +99,7 @@ def load_data():
     if 'WRESBAL_Ind' in df_fred.columns: df_fred['WRESBAL_Ind'] = df_fred['WRESBAL_Ind'] / 100
     if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
     if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 100
-    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] / 100
+    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] * 10
     if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 10
     if 'TOTLL' in df_fred.columns: df_fred['TOTLL'] = df_fred['TOTLL'] * 10 
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
