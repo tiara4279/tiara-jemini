@@ -10,7 +10,7 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS 및 메타 태그 (다크 네이비 테마 & 20% 사이즈 축소) ---
+# --- 커스텀 CSS 및 메타 태그 (다크 네이비 테마 & 60% 사이즈 축소) ---
 st.markdown("""<style>
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css");
 
@@ -25,7 +25,7 @@ html, body, [class*="css"], [class*="st-"] {
     color: #e2e8f0 !important;
 }
 
-/* 전체 폭 60%로 축소 (기존 75%에서 약 20% 추가 축소) */
+/* 전체 폭 60%로 축소하여 집중도 향상 */
 [data-testid="block-container"] {
     max-width: 60% !important; 
     padding-top: 2rem !important;
@@ -33,7 +33,7 @@ html, body, [class*="css"], [class*="st-"] {
 
 div[data-testid="stVerticalBlock"] > div {padding-bottom: 0.1rem;}
 
-/* 라디오 버튼 등 Streamlit 기본 UI 텍스트 색상 */
+/* 라디오 버튼 텍스트 색상 */
 .stRadio label { color: #cbd5e1 !important; font-size: 0.85rem !important; }
 
 /* 고급스러운 골드 그라데이션 구분선 */
@@ -73,7 +73,7 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
-# --- 데이터 로드 함수 ---
+# --- 데이터 로드 함수 (강건한 결측치 처리 적용) ---
 @st.cache_data(ttl=3600*12) 
 def load_data():
     end = datetime.datetime.today()
@@ -95,11 +95,11 @@ def load_data():
         except Exception as e:
             pass 
 
+    # 단위 환산 (억 달러로 통일)
     if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
     if 'WRESBAL_Ind' in df_fred.columns: df_fred['WRESBAL_Ind'] = df_fred['WRESBAL_Ind'] / 100
     if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
     if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 100
-    # WRMFNS는 10억 달러(Billions) 단위이므로 10을 곱하여 억 달러(100 Millions) 단위로 맞춤
     if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] * 10
     if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 10
     if 'TOTLL' in df_fred.columns: df_fred['TOTLL'] = df_fred['TOTLL'] * 10 
@@ -118,17 +118,20 @@ def load_data():
 
     df_merged = pd.concat([df_fred, df_yf], axis=1).ffill().bfill().fillna(0)
     
-    if all(col in df_merged.columns for col in ['Fed_BS', 'RRP', 'TGA']):
-        df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
-    else: df_merged['Net_Liquidity'] = 0
-        
-    if all(col in df_merged.columns for col in ['SOFR', 'IORB']):
-        df_merged['SOFR_IORB_Spread'] = df_merged['SOFR'] - df_merged['IORB']
-    else: df_merged['SOFR_IORB_Spread'] = 0.0
-        
-    if all(col in df_merged.columns for col in ['Discount_Window', 'BTFP']):
-        df_merged['Emergency_Loans'] = df_merged['Discount_Window'] + df_merged['BTFP']
-    else: df_merged['Emergency_Loans'] = 0.0
+    # --- 강건한(Robust) 데이터 계산 로직 ---
+    # 누락된 컬럼이 있어도 에러가 나지 않도록 개별 확인 후 계산
+    fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
+    rrp = df_merged['RRP'] if 'RRP' in df_merged.columns else 0.0
+    tga = df_merged['TGA'] if 'TGA' in df_merged.columns else 0.0
+    df_merged['Net_Liquidity'] = fed_bs - rrp - tga
+    
+    sofr = df_merged['SOFR'] if 'SOFR' in df_merged.columns else 0.0
+    iorb = df_merged['IORB'] if 'IORB' in df_merged.columns else 0.0
+    df_merged['SOFR_IORB_Spread'] = sofr - iorb
+    
+    dw = df_merged['Discount_Window'] if 'Discount_Window' in df_merged.columns else 0.0
+    btfp = df_merged['BTFP'] if 'BTFP' in df_merged.columns else 0.0
+    df_merged['Emergency_Loans'] = dw + btfp
     
     return df_merged
 
@@ -154,7 +157,7 @@ def eval_vix(v, d):
 
 def eval_move(v, d):
     if v >= 140: return "위험", COLOR_DANGER, "채권 시장이 패닉에 빠졌습니다. 금융 시스템 스트레스를 강하게 경계해야 합니다."
-    elif v >= 100: return "주의", COLOR_WARN, "채권 금리가 요동치고 있습니다. 유동성 흐름을 주의 깊게 관찰하십시오."
+    elif v >= 100: return "주의", COLOR_WARN, "채권 금리가 요동치고 있습니다. 유동성 흐름을 주의 깊 관찰하십시오."
     else: return "안정", COLOR_SAFE, "채권 시장이 평온하게 움직이고 있어 거시 경제 불확실성이 낮습니다."
 
 def eval_10y2y(v, d):
@@ -349,18 +352,15 @@ def render_detailed_indicator(key, df, days):
     is_10y2y = (key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns)
     
     if is_10y2y:
-        # 장단기 금리차의 경우 10년물/2년물은 왼쪽 보조 축, 차이(스프레드)는 오른쪽 메인 축으로 분리하여 그림
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#60a5fa', width=1.5, dash='dot'), opacity=0.7), secondary_y=True)
         fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#f87171', width=1.5, dash='dot'), opacity=0.7), secondary_y=True)
         fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#a3e635', width=3.0), fill='tozeroy', fillcolor=hex_to_rgba('#a3e635', 0.15)), secondary_y=False)
         
-        # 금리차 축 범위 (오른쪽 메인 축)
         min_spread, max_spread = sub_df.min(), sub_df.max()
         pad_sp = (max_spread - min_spread) * 0.2 if max_spread != min_spread else 0.5
         fig.update_yaxes(range=[min_spread - pad_sp, max_spread + pad_sp], secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='#a3e635'), zeroline=True, zerolinecolor='rgba(255,255,255,0.4)')
         
-        # 10Y, 2Y 원본 금리 축 범위 (왼쪽 보조 축)
         min_rate = min(df['10Y'].tail(days).min(), df['2Y'].tail(days).min())
         max_rate = max(df['10Y'].tail(days).max(), df['2Y'].tail(days).max())
         pad_rate = (max_rate - min_rate) * 0.2 if max_rate != min_rate else 0.5
@@ -368,16 +368,13 @@ def render_detailed_indicator(key, df, days):
         
     else:
         fig = plotly_go.Figure()
-        # 강제로 0을 포함시키는 속성을 우회하기 위해, 직접 계산한 Y축 범위를 강제 지정하여 변동성을 극대화
         fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', line=dict(color=status_color, width=2.5), fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.15)))
         
         min_val, max_val = sub_df.min(), sub_df.max()
         padding = (max_val - min_val) * 0.15
         if padding == 0: padding = abs(min_val) * 0.05 if min_val != 0 else 1
-        # Range를 수동 지정하여 '0'부터 시작하지 않고 데이터에 꽉 차게 확대
         fig.update_yaxes(range=[min_val - padding, max_val + padding], showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
 
-    # X축 날짜를 영어 월(Mar)에서 숫자 포맷(YY.MM.DD)으로 깔끔하게 변경
     fig.update_xaxes(
         tickformat="%y.%m.%d", 
         showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')
