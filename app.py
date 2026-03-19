@@ -342,18 +342,47 @@ def render_detailed_indicator(key, df, days):
 <div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
 </div>""", unsafe_allow_html=True)
     
-    fig = plotly_go.Figure()
+    # ---------------------------------------------------------
+    # [수정] 차트 렌더링 및 Y축 동적 확대(Auto-Range) 설정
+    # ---------------------------------------------------------
     is_10y2y = (key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns)
     
     if is_10y2y:
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#60a5fa', width=1.5), opacity=0.8))
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#f87171', width=1.5), opacity=0.8))
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#a3e635', width=3.0), fill='tozeroy', fillcolor=hex_to_rgba('#a3e635', 0.15)))
+        # 장단기 금리차의 경우 10년물/2년물은 왼쪽 보조 축, 차이(스프레드)는 오른쪽 메인 축으로 분리하여 그림
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#60a5fa', width=1.5, dash='dot'), opacity=0.7), secondary_y=True)
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#f87171', width=1.5, dash='dot'), opacity=0.7), secondary_y=True)
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#a3e635', width=3.0), fill='tozeroy', fillcolor=hex_to_rgba('#a3e635', 0.15)), secondary_y=False)
+        
+        # 금리차 축 범위 (오른쪽 메인 축)
+        min_spread, max_spread = sub_df.min(), sub_df.max()
+        pad_sp = (max_spread - min_spread) * 0.2 if max_spread != min_spread else 0.5
+        fig.update_yaxes(range=[min_spread - pad_sp, max_spread + pad_sp], secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='#a3e635'), zeroline=True, zerolinecolor='rgba(255,255,255,0.4)')
+        
+        # 10Y, 2Y 원본 금리 축 범위 (왼쪽 보조 축)
+        min_rate = min(df['10Y'].tail(days).min(), df['2Y'].tail(days).min())
+        max_rate = max(df['10Y'].tail(days).max(), df['2Y'].tail(days).max())
+        pad_rate = (max_rate - min_rate) * 0.2 if max_rate != min_rate else 0.5
+        fig.update_yaxes(range=[min_rate - pad_rate, max_rate + pad_rate], secondary_y=True, showgrid=False, tickfont=dict(color='rgba(255,255,255,0.4)'), zeroline=False)
+        
     else:
+        fig = plotly_go.Figure()
+        # [수정] 강제로 0을 포함시키는 속성을 우회하기 위해, 직접 계산한 Y축 범위를 강제 지정하여 변동성을 극대화
         fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', line=dict(color=status_color, width=2.5), fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.15)))
+        
+        min_val, max_val = sub_df.min(), sub_df.max()
+        padding = (max_val - min_val) * 0.15
+        if padding == 0: padding = abs(min_val) * 0.05 if min_val != 0 else 1
+        # Range를 수동 지정하여 '0'부터 시작하지 않고 데이터에 꽉 차게 확대
+        fig.update_yaxes(range=[min_val - padding, max_val + padding], showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
 
-    if key == '10Y_2Y': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
-    elif key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
+    # [수정] X축 날짜를 영어 월(Mar)에서 숫자 포맷(YY.MM.DD)으로 깔끔하게 변경
+    fig.update_xaxes(
+        tickformat="%y.%m.%d", 
+        showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')
+    )
+
+    if key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
     elif key == 'MOVE': fig.add_hline(y=140, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
     elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
     
@@ -361,8 +390,6 @@ def render_detailed_indicator(key, df, days):
         template="plotly_dark",
         height=220, 
         margin=dict(l=10, r=10, t=30 if is_10y2y else 10, b=10),
-        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
         hovermode='x unified',
         showlegend=is_10y2y,
@@ -428,7 +455,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
         title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", 
         height=360, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10),
         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='rgba(255,255,255,0.5)')),
+        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='rgba(255,255,255,0.5)')),
         yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='rgba(255,255,255,0.5)')),
         yaxis2=dict(showgrid=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
     )
