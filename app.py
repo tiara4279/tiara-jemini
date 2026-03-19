@@ -296,6 +296,11 @@ INDICATOR_META = {
 }
 
 # --- 공통 포맷팅 헬퍼 ---
+def hex_to_rgba(hex_color, alpha=0.15):
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f'rgba({r},{g},{b},{alpha})'
+
 def format_val(v, unit, is_sofr=False):
     if unit == '%': return f"{v:.3f}%" if is_sofr else f"{v:.2f}%"
     if unit == 'pt': return f"{v:.2f}"
@@ -303,26 +308,52 @@ def format_val(v, unit, is_sofr=False):
     return str(v)
 
 def format_chg_text(cur, prev, unit, is_inverted, is_sofr=False):
-    chg = cur - prev
-    abs_chg = abs(chg)
-    if chg == 0:
-        return f"<span style='color: rgba(255,255,255,0.4); font-weight: bold;'>변동 없음</span>", "rgba(255,255,255,0.4)"
+    diff = cur - prev
+    color = COLOR_SAFE if (diff < 0 if is_inverted else diff > 0) else COLOR_DANGER
+    if abs(diff) < 0.001: color = COLOR_NEUTRAL
+    arrow = "▼" if diff < 0 else "▲" if diff > 0 else "-"
     
-    val_str = f"{abs_chg:.3f}%p" if is_sofr else f"{abs_chg:.2f}%p" if unit == '%' else f"{abs_chg:.2f}pt" if unit == 'pt' else f"{abs_chg:,.0f}억 달러"
+    val_str = f"{abs(diff):.3f}%p" if is_sofr else f"{abs(diff):.2f}%p" if unit == '%' else f"{abs(diff):.2f}pt" if unit == 'pt' else f"{abs(diff):,.0f}억 달러"
+    dir_text = "상승" if (diff > 0 and unit in ['pt', '%']) else "증가" if diff > 0 else "하락" if unit in ['pt', '%'] else "감소"
+    if abs(diff) < 0.001: return f"<span style='color: {color}; font-weight: bold;'>변동 없음</span>", color
 
-    if chg > 0:
-        dir_text = "상승" if unit in ['pt', '%'] else "증가"
-        arrow, color = "▲", COLOR_DANGER if is_inverted else COLOR_SAFE
-    else:
-        dir_text = "하락" if unit in ['pt', '%'] else "감소"
-        arrow, color = "▼", COLOR_SAFE if is_inverted else COLOR_DANGER
+    return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>", color
 
-    return f"<span style='color: {color}; font-weight: bold;'>{arrow}{val_str} {dir_text}</span>", color
+# --- 요약 보드용 포맷팅 함수 ---
+def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
+    diff = cur - prev
+    color = COLOR_SAFE if (diff < 0 if invert else diff > 0) else COLOR_DANGER
+    if abs(diff) < 0.001: color = COLOR_NEUTRAL
+    arrow = "▼" if diff < 0 else "▲" if diff > 0 else "-"
+    
+    if unit == '원': val_str = f"{abs(diff):.0f}원"
+    elif unit == '엔': val_str = f"{abs(diff):.1f}엔"
+    elif unit == '%': val_str = f"{abs(diff):.2f}"
+    elif unit == 'B': val_str = f"${abs(diff):.2f}B"
+    elif unit == 'T': val_str = f"${abs(diff):.2f}T"
+    else: val_str = f"{abs(diff):.2f}"
+    
+    if abs(diff) < 0.001: return "변동 없음", color
+    return f"{arrow} {val_str} {period}", color
 
-def hex_to_rgba(hex_color, alpha=0.15):
-    hex_color = hex_color.lstrip('#')
-    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    return f'rgba({r},{g},{b},{alpha})'
+# SaaS 스타일의 프리미엄 미니 카드 생성기
+def render_mini_card(title, val_str, diff_data, footer, accent_color):
+    diff_text, diff_color = diff_data
+    bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
+    
+    return f'''
+    <div style="background: #1e293b; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
+        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;">
+            <div style="color: #cbd5e1; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div>
+            <div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">
+                {diff_text}
+            </div>
+        </div>
+        <div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div>
+        <div style="color: #64748b; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div>
+    </div>
+    '''
 
 # --- 프리미엄 디테일 카드 렌더링 함수 ---
 def render_detailed_indicator(key, df, days):
@@ -587,13 +618,11 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'SAMSUNG', 'USDKRW']):
     """
     st.markdown(korean_assets_html, unsafe_allow_html=True)
 
-# --- 핵심 매크로 및 유동성 요약 보드 (신규 추가) ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>📋</span> 핵심 지표 요약 보드</div>", unsafe_allow_html=True)
-
+# --- 핵심 매크로 및 유동성 요약 보드 (신규 추가, SaaS 스타일) ---
 def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
     diff = cur - prev
     color = COLOR_SAFE if (diff < 0 if invert else diff > 0) else COLOR_DANGER
-    if abs(diff) < 0.001: color = "rgba(255,255,255,0.4)"
+    if abs(diff) < 0.001: color = COLOR_NEUTRAL
     arrow = "▼" if diff < 0 else "▲" if diff > 0 else "-"
     
     if unit == '원': val_str = f"{abs(diff):.0f}원"
@@ -603,16 +632,24 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
     elif unit == 'T': val_str = f"${abs(diff):.2f}T"
     else: val_str = f"{abs(diff):.2f}"
     
-    return f"<span style='color:{color};'>{arrow} {val_str} {period} 대비</span>"
+    if abs(diff) < 0.001: return "변동 없음", color
+    return f"{arrow} {val_str} {period}", color
 
-def render_mini_card(title, val_str, diff_html, footer, rgb_color):
+def render_mini_card(title, val_str, diff_data, footer, accent_color):
+    diff_text, diff_color = diff_data
+    bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
+    
     return f'''
-    <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba({rgb_color}, 0.25); border-radius: 12px; padding: 18px;">
-        <div style="color: rgb({rgb_color}); font-size: 0.85rem; font-weight: 700; margin-bottom: 8px;">{title}</div>
-        <div style="color: #ffffff; font-size: 1.8rem; font-weight: 900; line-height: 1.2;">{val_str}</div>
-        <div style="font-size: 0.85rem; font-weight: 700; margin-top: 8px;">{diff_html}</div>
-        <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 12px 0 8px 0;"></div>
-        <div style="color: rgba(255,255,255,0.4); font-size: 0.75rem;">{footer}</div>
+    <div style="background: #1e293b; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
+        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;">
+            <div style="color: #cbd5e1; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div>
+            <div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">
+                {diff_text}
+            </div>
+        </div>
+        <div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div>
+        <div style="color: #64748b; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div>
     </div>
     '''
 
@@ -631,7 +668,7 @@ if all(c in df.columns for c in req_cols):
     elif fng_score <= 75: fng_state, fng_col = "탐욕 · greed", COLOR_SAFE
     else: fng_state, fng_col = "극단적 탐욕 · extreme greed", COLOR_SAFE
     
-    fng_diff_str = f"<span style='color:{fng_col};'>{fng_state}</span>"
+    fng_diff_data = (fng_state, fng_col)
     
     # 2. 매크로 데이터
     v_dxy = df['DXY'].dropna().values[-2:]
@@ -646,48 +683,52 @@ if all(c in df.columns for c in req_cols):
     v_tga = df['TGA'].dropna().values[-2:] * 100     # Billion 변환 (기존 코드가 /100 상태이므로 *100 복구)
 
     board_html = f'''
-    <div style="margin-bottom: 3rem;">
+    <div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
         <!-- 1. 시장 -->
-        <div style="margin-bottom: 1.5rem;">
-            <div style="font-size: 0.95rem; font-weight: 800; color: rgba(255,255,255,0.8); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span style="color: rgb(249, 115, 22);">📈</span> 시장
+        <div style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향</div>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                {render_mini_card("공포탐욕지수 (추정)", f"{fng_score}", fng_diff_str, "VIX 기반 추정치", "249, 115, 22")}
-                {render_mini_card("VIX 변동성", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "249, 115, 22")}
-                {render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "249, 115, 22")}
-                {render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "249, 115, 22")}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                {render_mini_card("공포탐욕지수 (추정)", f"{fng_score}", fng_diff_data, "VIX 기반 추정치", "#f97316")}
+                {render_mini_card("VIX 변동성", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316")}
+                {render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316")}
+                {render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316")}
             </div>
         </div>
 
         <!-- 2. 매크로 -->
-        <div style="margin-bottom: 1.5rem;">
-            <div style="font-size: 0.95rem; font-weight: 800; color: rgba(255,255,255,0.8); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span style="color: rgb(168, 85, 247);">🌐</span> 매크로
+        <div style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(168,85,247,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🌐</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">글로벌 매크로</div>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                {render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "168, 85, 247")}
-                {render_mini_card("달러/엔", f"{v_jpy[-1]:.1f}엔", make_diff_str(v_jpy[-1], v_jpy[-2], unit='엔', invert=True), "엔화 강세/약세", "168, 85, 247")}
-                {render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "168, 85, 247")}
-                {render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "168, 85, 247")}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                {render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7")}
+                {render_mini_card("달러/엔", f"{v_jpy[-1]:.1f}엔", make_diff_str(v_jpy[-1], v_jpy[-2], unit='엔', invert=True), "엔화 강세/약세", "#a855f7")}
+                {render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7")}
+                {render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7")}
             </div>
         </div>
 
         <!-- 3. 유동성 -->
-        <div style="margin-bottom: 1.5rem;">
-            <div style="font-size: 0.95rem; font-weight: 800; color: rgba(255,255,255,0.8); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span style="color: rgb(59, 130, 246);">💧</span> 유동성
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💧</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">달러 유동성</div>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주'), "연준 대차대조표 · QE/QT", "59, 130, 246")}
-                {render_mini_card("연준 지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주'), "은행 시스템 총 준비금", "59, 130, 246")}
-                {render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "연준 초과유동성 흡수액", "59, 130, 246")}
-                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주'), "재무부 일반계정 잔고", "59, 130, 246")}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주'), "연준 대차대조표 · QE/QT", "#3b82f6")}
+                {render_mini_card("연준 지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주'), "은행 시스템 총 준비금", "#3b82f6")}
+                {render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "연준 초과유동성 흡수", "#3b82f6")}
+                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주'), "재무부 일반계정", "#3b82f6")}
             </div>
         </div>
     </div>
     '''
     st.markdown(board_html, unsafe_allow_html=True)
+
 
 custom_header("🌊", "미국 핵심 유동성 흐름", "Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
 
