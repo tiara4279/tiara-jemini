@@ -10,33 +10,62 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS 및 메타 태그 (오류 수정: 빈 줄 완벽 제거 + 75% 화면 비율 적용) ---
+# --- 커스텀 CSS 및 메타 태그 (다크 네이비 테마 & 20% 사이즈 축소) ---
 st.markdown("""<style>
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css");
-html, body, [class*="css"], [class*="st-"] {font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif !important;}
-[data-testid="block-container"] {max-width: 75% !important;}
-div[data-testid="stVerticalBlock"] > div {padding-bottom: 0.2rem;}
-hr {margin-top: 4rem; margin-bottom: 4rem; border: 0; height: 1px; background: linear-gradient(to right, rgba(128,128,128,0), rgba(128,128,128,0.2), rgba(128,128,128,0));}
-::-webkit-scrollbar {width: 8px; height: 8px;}
-::-webkit-scrollbar-track {background: rgba(128,128,128,0.02);}
-::-webkit-scrollbar-thumb {background: rgba(128,128,128,0.2); border-radius: 4px;}
-::-webkit-scrollbar-thumb:hover {background: rgba(128,128,128,0.4);}
+
+/* 배경 및 기본 텍스트 색상 (스튜디오 톤) */
+.stApp {
+    background-color: #121824 !important;
+    background-image: linear-gradient(180deg, #1a2235 0%, #0f151f 100%) !important;
+}
+
+html, body, [class*="css"], [class*="st-"] {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, sans-serif !important;
+    color: #e2e8f0 !important;
+}
+
+/* 전체 폭 60%로 축소 (기존 75%에서 약 20% 추가 축소) */
+[data-testid="block-container"] {
+    max-width: 60% !important; 
+    padding-top: 2rem !important;
+}
+
+div[data-testid="stVerticalBlock"] > div {padding-bottom: 0.1rem;}
+
+/* 라디오 버튼 등 Streamlit 기본 UI 텍스트 색상 */
+.stRadio label { color: #cbd5e1 !important; font-size: 0.85rem !important; }
+
+/* 고급스러운 골드 그라데이션 구분선 */
+hr {
+    margin-top: 2.5rem; 
+    margin-bottom: 2.5rem; 
+    border: 0; 
+    height: 1px; 
+    background: linear-gradient(to right, rgba(212,175,55,0), rgba(212,175,55,0.4), rgba(212,175,55,0));
+}
+
+/* 스크롤바 미세조정 */
+::-webkit-scrollbar {width: 6px; height: 6px;}
+::-webkit-scrollbar-track {background: rgba(255,255,255,0.02);}
+::-webkit-scrollbar-thumb {background: rgba(255,255,255,0.15); border-radius: 3px;}
+::-webkit-scrollbar-thumb:hover {background: rgba(212,175,55,0.5);}
 </style>""", unsafe_allow_html=True)
 
-# --- 커스텀 섹션 헤더 함수 (오류 수정: 빈 줄 제거) ---
+# --- 커스텀 섹션 헤더 함수 ---
 def custom_header(icon, title, desc):
-    st.markdown(f"""<div style="margin-top: 1rem; margin-bottom: 2rem;">
-<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
-<span style="font-size: 2.2rem;">{icon}</span>
-<h2 style="margin: 0; padding: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px;">{title}</h2>
+    st.markdown(f"""<div style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+<span style="font-size: 1.8rem;">{icon}</span>
+<h2 style="margin: 0; padding: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{title}</h2>
 </div>
-<div style="font-size: 1.05rem; color: #888; font-weight: 500; margin-left: 4px;">{desc}</div>
+<div style="font-size: 0.9rem; color: rgba(255,255,255,0.6); font-weight: 500; margin-left: 4px;">{desc}</div>
 </div>""", unsafe_allow_html=True)
 
-custom_header("🌐", "시장 경제 지표 대시보드", "시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터 매일 자동 갱신)")
+custom_header("👑", "시장 경제 지표 대시보드", "시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터 매일 자동 갱신)")
 
 # --- 기간 선택 컨트롤 ---
-st.markdown("""<div style="font-size: 0.95rem; font-weight: 700; color: #607D8B; margin-bottom: 8px; margin-top: 20px;">
+st.markdown("""<div style="font-size: 0.85rem; font-weight: 700; color: #D4AF37; margin-bottom: 6px; margin-top: 15px;">
 ⏱️ 추이 기준 기간 선택
 </div>""", unsafe_allow_html=True)
 period_options = {"1주일": 5, "1개월": 21, "3개월": 63, "6개월": 126, "1년": 252, "3년": 756}
@@ -66,7 +95,6 @@ def load_data():
         except Exception as e:
             pass 
 
-    # 단위 환산 (억 달러)
     if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
     if 'WRESBAL_Ind' in df_fred.columns: df_fred['WRESBAL_Ind'] = df_fred['WRESBAL_Ind'] / 100
     if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
@@ -110,11 +138,12 @@ if df.empty or len(df) < 6:
     st.error("🚨 데이터를 가져오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
     st.stop()
 
-# --- 색상 테마 설정 ---
-COLOR_SAFE = "#1976D2"   # 긍정/안정 (파랑)
-COLOR_WARN = "#E67E22"   # 주의 (선명한 주황)
-COLOR_DANGER = "#D32F2F" # 경계/위험 (진한 빨강)
-COLOR_NEUTRAL = "#607D8B" # 중립 (블루 그레이)
+# --- 다크 모드용 형광색 테마 설정 ---
+COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
+COLOR_WARN = "#facc15"   # 주의 (골드 옐로우)
+COLOR_DANGER = "#f87171" # 경계/위험 (라이트 레드/핑크)
+COLOR_NEUTRAL = "#94a3b8" # 중립 (슬레이트 그레이)
+ACCENT_GOLD = "#D4AF37"  # 강조 골드 (스튜디오 톤)
 
 # --- 지표별 평가 함수 및 메타데이터 ---
 def eval_vix(v, d):
@@ -252,30 +281,20 @@ def format_val(v, unit, is_sofr=False):
 
 def format_chg_text(cur, prev, unit, is_inverted, is_sofr=False):
     chg = cur - prev
-    pct = (chg / prev * 100) if prev != 0 else 0
     abs_chg = abs(chg)
-    
     if chg == 0:
-        return f"<span style='color: gray; font-weight: bold;'>변동 없음</span>", "gray"
+        return f"<span style='color: rgba(255,255,255,0.4); font-weight: bold;'>변동 없음</span>", "rgba(255,255,255,0.4)"
     
-    if unit == '%': 
-        val_str = f"{abs_chg:.3f}%p" if is_sofr else f"{abs_chg:.2f}%p"
-    elif unit == 'pt': 
-        val_str = f"{abs_chg:.2f}pt"
-    else: 
-        val_str = f"{abs_chg:,.0f}억 달러"
+    val_str = f"{abs_chg:.3f}%p" if is_sofr else f"{abs_chg:.2f}%p" if unit == '%' else f"{abs_chg:.2f}pt" if unit == 'pt' else f"{abs_chg:,.0f}억 달러"
 
     if chg > 0:
         dir_text = "상승" if unit in ['pt', '%'] else "증가"
-        arrow = "▲"
-        color = COLOR_DANGER if is_inverted else COLOR_SAFE
+        arrow, color = "▲", COLOR_DANGER if is_inverted else COLOR_SAFE
     else:
         dir_text = "하락" if unit in ['pt', '%'] else "감소"
-        arrow = "▼"
-        color = COLOR_SAFE if is_inverted else COLOR_DANGER
+        arrow, color = "▼", COLOR_SAFE if is_inverted else COLOR_DANGER
 
-    html_str = f"<span style='color: {color}; font-weight: bold;'>{arrow}{val_str} {dir_text}</span>"
-    return html_str, color
+    return f"<span style='color: {color}; font-weight: bold;'>{arrow}{val_str} {dir_text}</span>", color
 
 def hex_to_rgba(hex_color, alpha=0.15):
     hex_color = hex_color.lstrip('#')
@@ -308,86 +327,86 @@ def render_detailed_indicator(key, df, days):
         try:
             val_10y = df['10Y'].dropna().iloc[-1]
             val_2y = df['2Y'].dropna().iloc[-1]
-            extra_info_html = f"""<div style="font-size: 0.95rem; background-color: rgba(25,118,210,0.04); padding: 16px 20px; border-radius: 12px; margin-top: 15px; margin-bottom: 25px; border: 1px solid rgba(25,118,210,0.15);">
-<b style="color: {COLOR_SAFE};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
+            extra_info_html = f"""<div style="font-size: 0.85rem; background-color: rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);">
+<b style="color: {ACCENT_GOLD};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
 따라서 두 금리의 차이(10년물 - 2년물)는 <b style="color:{status_color}">{cur:.2f}%</b>가 됩니다.
 </div>"""
-        except:
-            pass
+        except: pass
     
-    top_text_html = f"<div style='color: #607D8B; font-size: 0.85rem; font-weight: 700; margin-bottom: 4px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
+    top_text_html = f"<div style='color: {ACCENT_GOLD}; font-size: 0.75rem; font-weight: 700; margin-bottom: 2px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
     st.markdown(f"""<div style="margin-top: 1rem;">
 {top_text_html}
-<div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;">
-<h3 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px;">{meta['name']}</h3>
+<div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
+<h3 style="margin: 0; padding: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{meta['name']}</h3>
 </div>
-<div style="color: #888; font-size: 0.85rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
+<div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
 </div>""", unsafe_allow_html=True)
     
     fig = plotly_go.Figure()
     is_10y2y = (key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns)
     
     if is_10y2y:
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#2196F3', width=1.5), opacity=0.8))
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#F44336', width=1.5), opacity=0.8))
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#8BC34A', width=3.5), fill='tozeroy', fillcolor=hex_to_rgba('#8BC34A', 0.15)))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#60a5fa', width=1.5), opacity=0.8))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#f87171', width=1.5), opacity=0.8))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#a3e635', width=3.0), fill='tozeroy', fillcolor=hex_to_rgba('#a3e635', 0.15)))
     else:
-        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', line=dict(color=status_color, width=2.5), fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', line=dict(color=status_color, width=2.5), fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.15)))
 
-    if key == '10Y_2Y': fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
-    elif key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="red", opacity=0.3)
-    elif key == 'MOVE': fig.add_hline(y=140, line_dash="dash", line_color="red", opacity=0.3)
-    elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    if key == '10Y_2Y': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
+    elif key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
+    elif key == 'MOVE': fig.add_hline(y=140, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
+    elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
     
     fig.update_layout(
-        height=280, 
+        template="plotly_dark",
+        height=220, 
         margin=dict(l=10, r=10, t=30 if is_10y2y else 10, b=10),
-        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', zeroline=False),
-        yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right', zeroline=False),
+        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
         hovermode='x unified',
         showlegend=is_10y2y,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1) if is_10y2y else None
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='rgba(255,255,255,0.7)')) if is_10y2y else None
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{key}")
     
     level_cards_html = ""
     for lvl in meta['levels']:
-        level_cards_html += f"""<div style="flex: 1; min-width: 220px; background: rgba(128,128,128,0.03); border: 1px solid rgba(128,128,128,0.08); border-left: 4px solid {lvl[2]}; border-radius: 10px; padding: 16px;">
-<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-<span style="font-size: 18px;">{lvl[3]}</span>
-<span style="font-weight: 800; font-size: 14px;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
+        level_cards_html += f"""<div style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 14px;">
+<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+<span style="font-size: 16px;">{lvl[3]}</span>
+<span style="font-weight: 800; font-size: 12px; color: #f8fafc;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
 </div>
-<div style="font-size: 13px; opacity: 0.75; line-height: 1.5;">{lvl[4]}</div>
+<div style="font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.5;">{lvl[4]}</div>
 </div>"""
 
-    unified_card_html = f"""<div style="background: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 16px; padding: 26px; margin-top: 10px; margin-bottom: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(128,128,128,0.1); padding-bottom: 24px; margin-bottom: 24px; gap: 20px;">
-<div style="flex: 1; min-width: 280px;">
-<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-<span style="background: {status_color}15; color: {status_color}; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 800; border: 1px solid {status_color}30;">{status_label}</span>
-<span style="font-size: 13px; opacity: 0.6; font-weight: 600;">최근 {selected_period_label} 기준</span>
+    unified_card_html = f"""<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px; margin-top: 8px; margin-bottom: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 20px; gap: 16px;">
+<div style="flex: 1; min-width: 260px;">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+<span style="background: {status_color}20; color: {status_color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; border: 1px solid {status_color}40;">{status_label}</span>
+<span style="font-size: 11.5px; color: rgba(255,255,255,0.5); font-weight: 600;">최근 {selected_period_label} 기준</span>
 </div>
-<div style="font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px;">{format_val(cur, meta['unit'], is_sofr)}</div>
-<div style="font-size: 1.05rem; opacity: 0.9; font-weight: 600;"><b>{meta['short_name']}</b> — {status_text}</div>
+<div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px; color: #f8fafc;">{format_val(cur, meta['unit'], is_sofr)}</div>
+<div style="font-size: 0.95rem; color: rgba(255,255,255,0.8); font-weight: 600;"><b style="color: {ACCENT_GOLD};">{meta['short_name']}</b> — {status_text}</div>
 </div>
-<div style="display: flex; gap: 30px; background: rgba(128,128,128,0.03); padding: 18px 24px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.06);">
+<div style="display: flex; gap: 24px; background: rgba(255,255,255,0.02); padding: 14px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
 <div>
-<div style="font-size: 13px; opacity: 0.6; font-weight: 600; margin-bottom: 6px;">1주 전 대비</div>
-<div style="font-size: 1.1rem;">{chg_1w_html}</div>
+<div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">1주 전 대비</div>
+<div style="font-size: 1rem;">{chg_1w_html}</div>
 </div>
-<div style="width: 1px; background: rgba(128,128,128,0.15);"></div>
+<div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
 <div>
-<div style="font-size: 13px; opacity: 0.6; font-weight: 600; margin-bottom: 6px;">3개월 전 대비</div>
-<div style="font-size: 1.1rem;">{chg_3m_html}</div>
+<div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">3개월 전 대비</div>
+<div style="font-size: 1rem;">{chg_3m_html}</div>
 </div>
 </div>
 </div>
 {extra_info_html}
 <div>
-<div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 10px; color: {COLOR_NEUTRAL};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
-<div style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 20px; line-height: 1.6;">{meta['desc']}</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
+<div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; color: {ACCENT_GOLD};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
+<div style="font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; line-height: 1.6;">{meta['desc']}</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
 {level_cards_html}
 </div>
 </div>
@@ -403,18 +422,25 @@ custom_header("🌊", "미국 핵심 유동성 흐름", "Net Liquidity와 주식
 
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#1976D2', width=2.5)), secondary_y=False)
-    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#D32F2F', width=1.5)), secondary_y=True)
-    fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10))
-    fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
-    fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#60a5fa', width=2.5)), secondary_y=False)
+    fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#f87171', width=1.5)), secondary_y=True)
+    fig_liq.update_layout(
+        title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", 
+        height=360, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10),
+        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='rgba(255,255,255,0.5)')),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='rgba(255,255,255,0.5)')),
+        yaxis2=dict(showgrid=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
+    )
+    fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False, title_font=dict(color='rgba(255,255,255,0.6)'))
+    fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True, title_font=dict(color='rgba(255,255,255,0.6)'))
     st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False}, key="net_liq_chart")
     
-    st.markdown("""<div style="background: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 16px; padding: 24px; margin-top: 15px; margin-bottom: 60px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
-<div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 12px; color:#607D8B;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
-<div style="font-size: 0.95rem; opacity: 0.85; line-height: 1.6;">
+    st.markdown("""<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(212,175,55,0.3); border-radius: 14px; padding: 20px; margin-top: 15px; margin-bottom: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+<div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 10px; color:#D4AF37;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
+<div style="font-size: 0.85rem; color: rgba(255,255,255,0.7); line-height: 1.6;">
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
-통상적으로 <b style="color:#1976D2">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#D32F2F">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
+통상적으로 <b style="color:#60a5fa">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#f87171">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -490,24 +516,24 @@ def generate_report_html(df, days):
         strategy = f"거시 지표 방향성이 혼재되어 있습니다. <b>관망세 유지 및 대출 의존도가 낮은 우량(Quality) 기업 위주의 선별적 접근</b>이 필요합니다."
         s_color = COLOR_WARN
 
-    return f"""<div style="background: linear-gradient(145deg, rgba(25,118,210,0.02) 0%, rgba(25,118,210,0.06) 100%); border: 1px solid rgba(25,118,210,0.15); border-radius: 16px; padding: 32px; margin-bottom: 30px; box-shadow: 0 8px 32px rgba(25,118,210,0.05);">
-<div style="font-size: 1.15rem; font-weight: 800; color: #1976D2; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-<span style="font-size: 1.4rem;">💡</span> 핵심 자산 배분 전략
+    return f"""<div style="background: linear-gradient(145deg, rgba(212,175,55,0.06) 0%, rgba(212,175,55,0.02) 100%); border: 1px solid rgba(212,175,55,0.3); border-radius: 16px; padding: 26px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+<div style="font-size: 1.05rem; font-weight: 800; color: #D4AF37; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+<span style="font-size: 1.2rem;">💡</span> 핵심 자산 배분 전략
 </div>
-<div style="font-size: 1.1rem; font-weight: 500; line-height: 1.6; margin-bottom: 30px; color: {s_color}; background: rgba(255,255,255,0.6); padding: 16px 20px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.1);">
+<div style="font-size: 1rem; font-weight: 500; line-height: 1.6; margin-bottom: 24px; color: {s_color}; background: rgba(0,0,0,0.2); padding: 14px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
 {strategy}
 </div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
-<div style="background: rgba(255,255,255,0.4); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-<div style="font-weight: 800; font-size: 1.05rem; margin-bottom: 16px; color: #607D8B; border-bottom: 2px solid rgba(128,128,128,0.1); padding-bottom: 8px;">📌 시장 심리 및 유동성</div>
-<div style="line-height: 1.8; font-size: 0.95rem; opacity: 0.9;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
+<div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+<div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 시장 심리 및 유동성</div>
+<div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
 <div>• {vix_msg}</div>
 <div>• {sys_msg}</div>
 </div>
 </div>
-<div style="background: rgba(255,255,255,0.4); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-<div style="font-weight: 800; font-size: 1.05rem; margin-bottom: 16px; color: #607D8B; border-bottom: 2px solid rgba(128,128,128,0.1); padding-bottom: 8px;">📌 매크로 및 신용 환경</div>
-<div style="line-height: 1.8; font-size: 0.95rem; opacity: 0.9;">
+<div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+<div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 매크로 및 신용 환경</div>
+<div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
 <div>• {sofr_msg}</div>
 <div>• {totll_msg}</div>
 <div>• {yield_msg}</div>
