@@ -106,8 +106,8 @@ def load_data():
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
     if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
 
-    # 나스닥, 금, 비트코인, 한국 자산 및 매크로 지표(WTI, 엔화) 데이터 수집 추가
-    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^IXIC', 'GC=F', 'BTC-USD', '^KS11', '^KQ11', '005930.KS', 'KRW=X', 'JPY=X', 'CL=F']
+    # 세계 외환 지표, 매크로 및 한국 경제 지표 데이터 수집 추가 (삼성전자, 나스닥 등 불필요 데이터 삭제)
+    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X']
     df_yf = pd.DataFrame()
     try:
         yf_data = yf.download(tickers, start=start, end=end, progress=False)
@@ -115,14 +115,18 @@ def load_data():
         else: df_yf = yf_data
         df_yf = df_yf.rename(columns={
             '^GSPC': 'SP500', '^MOVE': 'MOVE', 'DX-Y.NYB': 'DXY', 
-            '^IXIC': 'NASDAQ', 'GC=F': 'GOLD', 'BTC-USD': 'BTC',
-            '^KS11': 'KOSPI', '^KQ11': 'KOSDAQ', '005930.KS': 'SAMSUNG', 'KRW=X': 'USDKRW',
-            'JPY=X': 'USDJPY', 'CL=F': 'WTI'
+            '^KS11': 'KOSPI', '^KQ11': 'KOSDAQ', 'KRW=X': 'USDKRW',
+            'JPY=X': 'USDJPY', 'CL=F': 'WTI',
+            'EURUSD=X': 'EURUSD', 'GBPUSD=X': 'GBPUSD', 'CNY=X': 'USDCNY'
         })
     except Exception as e:
         pass
 
-    df_merged = pd.concat([df_fred, df_yf], axis=1).ffill().bfill().fillna(0)
+    # 원본 데이터 보존 (변동 없음 버그 해결용)
+    df_raw = pd.concat([df_fred, df_yf], axis=1)
+    
+    # 차트 렌더링용 채우기 (ffill) 적용된 데이터
+    df_merged = df_raw.ffill().bfill().fillna(0)
     
     # --- 강건한(Robust) 데이터 계산 로직 ---
     fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
@@ -140,10 +144,10 @@ def load_data():
     btfp = df_merged['BTFP'] if 'BTFP' in df_merged.columns else 0.0
     df_merged['Emergency_Loans'] = dw + btfp
     
-    return df_merged
+    return df_merged, df_raw
 
 with st.spinner('데이터를 수집하고 정밀 분석 중입니다...'):
-    df = load_data()
+    df, df_raw = load_data()
 
 if df.empty or len(df) < 6:
     st.error("🚨 데이터를 가져오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
@@ -320,7 +324,7 @@ def format_chg_text(cur, prev, unit, is_inverted, is_sofr=False):
     return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>", color
 
 # --- 요약 보드용 포맷팅 함수 ---
-def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
+def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     diff = cur - prev
     color = COLOR_SAFE if (diff < 0 if invert else diff > 0) else COLOR_DANGER
     if abs(diff) < 0.001: color = COLOR_NEUTRAL
@@ -328,7 +332,7 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
     
     if unit == '원': val_str = f"{abs(diff):.0f}원"
     elif unit == '엔': val_str = f"{abs(diff):.1f}엔"
-    elif unit == '%': val_str = f"{abs(diff):.2f}"
+    elif unit == '%': val_str = f"{abs(diff):.2f}%p"
     elif unit == 'B': val_str = f"${abs(diff):.2f}B"
     elif unit == 'T': val_str = f"${abs(diff):.2f}T"
     else: val_str = f"{abs(diff):.2f}"
@@ -494,72 +498,72 @@ def render_detailed_indicator(key, df, days):
 # 대시보드 렌더링 시작
 # ==========================================
 
-# --- 글로벌 자산 요약 섹션 ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 30px;'><span style='margin-right: 8px;'>📊</span> 글로벌 자산</div>", unsafe_allow_html=True)
+# --- 세계 외환 지표 섹션 ---
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 30px;'><span style='margin-right: 8px;'>💱</span> 세계 외환 지표</div>", unsafe_allow_html=True)
 
-if all(col in df.columns for col in ['SP500', 'NASDAQ', 'GOLD', 'BTC']):
-    sp500_cur = df['SP500'].iloc[-1]
-    sp500_ath = df['SP500'].max()
-    sp500_dd = (sp500_cur / sp500_ath - 1) * 100
-    sp500_dd_str = f"+{sp500_dd:.1f}%" if sp500_dd > 0 else f"{sp500_dd:.1f}%"
-    sp500_color = COLOR_DANGER if sp500_dd < -5 else COLOR_WARN if sp500_dd < 0 else COLOR_SAFE
+if all(col in df.columns for col in ['EURUSD', 'USDJPY', 'USDCNY', 'GBPUSD']):
+    eur_cur = df['EURUSD'].iloc[-1]
+    eur_prev = df['EURUSD'].iloc[-2]
+    eur_chg = (eur_cur / eur_prev - 1) * 100
+    eur_chg_str = f"▲ {eur_chg:.2f}%" if eur_chg >= 0 else f"▼ {abs(eur_chg):.2f}%"
+    eur_color = COLOR_SAFE if eur_chg >= 0 else COLOR_DANGER
 
-    nasdaq_cur = df['NASDAQ'].iloc[-1]
-    nasdaq_ath = df['NASDAQ'].max()
-    nasdaq_dd = (nasdaq_cur / nasdaq_ath - 1) * 100
-    nasdaq_dd_str = f"+{nasdaq_dd:.1f}%" if nasdaq_dd > 0 else f"{nasdaq_dd:.1f}%"
-    nasdaq_color = COLOR_DANGER if nasdaq_dd < -5 else COLOR_WARN if nasdaq_dd < 0 else COLOR_SAFE
+    jpy_cur = df['USDJPY'].iloc[-1]
+    jpy_prev = df['USDJPY'].iloc[-2]
+    jpy_chg = (jpy_cur / jpy_prev - 1) * 100
+    jpy_chg_str = f"▲ {jpy_chg:.2f}%" if jpy_chg >= 0 else f"▼ {abs(jpy_chg):.2f}%"
+    jpy_color = COLOR_SAFE if jpy_chg >= 0 else COLOR_DANGER
 
-    gold_cur = df['GOLD'].iloc[-1]
-    gold_prev = df['GOLD'].iloc[-2]
-    gold_chg = (gold_cur / gold_prev - 1) * 100
-    gold_chg_str = f"▲ {gold_chg:.2f}%" if gold_chg >= 0 else f"▼ {abs(gold_chg):.2f}%"
-    gold_color = COLOR_SAFE if gold_chg >= 0 else COLOR_DANGER
+    cny_cur = df['USDCNY'].iloc[-1]
+    cny_prev = df['USDCNY'].iloc[-2]
+    cny_chg = (cny_cur / cny_prev - 1) * 100
+    cny_chg_str = f"▲ {cny_chg:.2f}%" if cny_chg >= 0 else f"▼ {abs(cny_chg):.2f}%"
+    cny_color = COLOR_SAFE if cny_chg >= 0 else COLOR_DANGER
 
-    btc_cur = df['BTC'].iloc[-1]
-    btc_prev = df['BTC'].iloc[-2]
-    btc_chg = (btc_cur / btc_prev - 1) * 100
-    btc_chg_str = f"▲ {btc_chg:.2f}%" if btc_chg >= 0 else f"▼ {abs(btc_chg):.2f}%"
-    btc_color = COLOR_SAFE if btc_chg >= 0 else COLOR_DANGER
+    gbp_cur = df['GBPUSD'].iloc[-1]
+    gbp_prev = df['GBPUSD'].iloc[-2]
+    gbp_chg = (gbp_cur / gbp_prev - 1) * 100
+    gbp_chg_str = f"▲ {gbp_chg:.2f}%" if gbp_chg >= 0 else f"▼ {abs(gbp_chg):.2f}%"
+    gbp_color = COLOR_SAFE if gbp_chg >= 0 else COLOR_DANGER
 
     global_assets_html = f"""
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 2rem;">
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
-            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">S&P500</div>
-            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{sp500_dd_str}</div>
-            <div style="color: {sp500_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
+            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">유로/달러 (EUR/USD)</div>
+            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{eur_cur:.4f}</div>
+            <div style="color: {eur_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{eur_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">전고점 대비 낙폭</div>
+            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 유로당 달러</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
-            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">나스닥</div>
-            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{nasdaq_dd_str}</div>
-            <div style="color: {nasdaq_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
+            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">달러/엔 (USD/JPY)</div>
+            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{jpy_cur:.2f}</div>
+            <div style="color: {jpy_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{jpy_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">전고점 대비 낙폭</div>
+            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 달러당 엔화</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
-            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">금</div>
-            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">${gold_cur:,.0f}</div>
-            <div style="color: {gold_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{gold_chg_str} 전일</div>
+            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">달러/위안 (USD/CNY)</div>
+            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{cny_cur:.4f}</div>
+            <div style="color: {cny_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{cny_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">USD/온스 · 안전자산</div>
+            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 달러당 위안화</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
-            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">비트코인</div>
-            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">${btc_cur/1000:.0f}K</div>
-            <div style="color: {btc_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{btc_chg_str} 전일</div>
+            <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">파운드/달러 (GBP/USD)</div>
+            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{gbp_cur:.4f}</div>
+            <div style="color: {gbp_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{gbp_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">BTC/USD · 위험선호</div>
+            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 파운드당 달러</div>
         </div>
     </div>
     """
     st.markdown(global_assets_html, unsafe_allow_html=True)
 
-# --- 한국 자산 요약 섹션 ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇰🇷</span> 한국 자산</div>", unsafe_allow_html=True)
+# --- 한국 경제 지표 섹션 ---
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇰🇷</span> 한국 경제 지표</div>", unsafe_allow_html=True)
 
-if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'SAMSUNG', 'USDKRW']):
+if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'USDKRW']):
     kospi_cur = df['KOSPI'].iloc[-1]
     kospi_ath = df['KOSPI'].max()
     kospi_dd = (kospi_cur / kospi_ath - 1) * 100
@@ -571,12 +575,6 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'SAMSUNG', 'USDKRW']):
     kosdaq_dd = (kosdaq_cur / kosdaq_ath - 1) * 100
     kosdaq_dd_str = f"+{kosdaq_dd:.1f}%" if kosdaq_dd > 0 else f"{kosdaq_dd:.1f}%"
     kosdaq_color = COLOR_DANGER if kosdaq_dd < -5 else COLOR_WARN if kosdaq_dd < 0 else COLOR_SAFE
-
-    samsung_cur = df['SAMSUNG'].iloc[-1]
-    samsung_prev = df['SAMSUNG'].iloc[-2]
-    samsung_chg = (samsung_cur / samsung_prev - 1) * 100
-    samsung_chg_str = f"▲ {samsung_chg:.2f}%" if samsung_chg >= 0 else f"▼ {abs(samsung_chg):.2f}%"
-    samsung_color = COLOR_SAFE if samsung_chg >= 0 else COLOR_DANGER
 
     usdkrw_cur = df['USDKRW'].iloc[-1]
     usdkrw_prev = df['USDKRW'].iloc[-2]
@@ -601,13 +599,6 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'SAMSUNG', 'USDKRW']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">전고점 대비 낙폭</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(16,185,129,0.15); border-radius: 12px; padding: 20px;">
-            <div style="color: {ACCENT_KOREA}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">삼성전자</div>
-            <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{samsung_cur:,.0f}원</div>
-            <div style="color: {samsung_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{samsung_chg_str} 전일</div>
-            <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">코스피 비중 20%+</div>
-        </div>
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(16,185,129,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_KOREA}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">원달러 환율</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{usdkrw_cur:,.0f}원</div>
             <div style="color: {usdkrw_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{usdkrw_chg_str} 전일</div>
@@ -618,49 +609,19 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'SAMSUNG', 'USDKRW']):
     """
     st.markdown(korean_assets_html, unsafe_allow_html=True)
 
-# --- 핵심 매크로 및 유동성 요약 보드 (신규 추가, SaaS 스타일) ---
-def make_diff_str(cur, prev, unit='', invert=False, period='전일'):
-    diff = cur - prev
-    color = COLOR_SAFE if (diff < 0 if invert else diff > 0) else COLOR_DANGER
-    if abs(diff) < 0.001: color = COLOR_NEUTRAL
-    arrow = "▼" if diff < 0 else "▲" if diff > 0 else "-"
-    
-    if unit == '원': val_str = f"{abs(diff):.0f}원"
-    elif unit == '엔': val_str = f"{abs(diff):.1f}엔"
-    elif unit == '%': val_str = f"{abs(diff):.2f}"
-    elif unit == 'B': val_str = f"${abs(diff):.2f}B"
-    elif unit == 'T': val_str = f"${abs(diff):.2f}T"
-    else: val_str = f"{abs(diff):.2f}"
-    
-    if abs(diff) < 0.001: return "변동 없음", color
-    return f"{arrow} {val_str} {period}", color
-
-def render_mini_card(title, val_str, diff_data, footer, accent_color):
-    diff_text, diff_color = diff_data
-    bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
-    
-    return f'''
-    <div style="background: #1e293b; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
-        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div>
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;">
-            <div style="color: #cbd5e1; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div>
-            <div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">
-                {diff_text}
-            </div>
-        </div>
-        <div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div>
-        <div style="color: #64748b; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div>
-    </div>
-    '''
+# --- 핵심 매크로 및 유동성 요약 보드 (신규 추가, 결측치 완벽 해결버전) ---
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>📋</span> 핵심 지표 요약 보드</div>", unsafe_allow_html=True)
 
 req_cols = ['VIX', '10Y_2Y', 'HY_Spread', 'DXY', 'USDJPY', '10Y', 'WTI', 'Fed_BS', 'Reserves', 'RRP', 'TGA']
-if all(c in df.columns for c in req_cols):
-    # 1. 시장 데이터
-    v_vix = df['VIX'].dropna().values[-2:]
-    v_10y2y = df['10Y_2Y'].dropna().values[-2:]
-    v_hy = df['HY_Spread'].dropna().values[-2:]
+if all(c in df_raw.columns for c in req_cols):
     
-    # 공포탐욕지수 프록시 계산 (VIX 역산 추정치)
+    # [버그 수정] ffill로 인한 중복 데이터를 피하기 위해, 채워지지 않은 순수 원본 데이터(df_raw)에서 
+    # 값이 존재하는(dropna) 가장 최신의 데이터 2개만 깔끔하게 가져옵니다. 
+    # 이렇게 하면 연준 데이터가 하루 늦게 오더라도 무조건 '변동 없음'이 뜨는 증상이 완벽히 해결됩니다!
+    v_vix = df_raw['VIX'].dropna().values[-2:]
+    v_10y2y = df_raw['10Y_2Y'].dropna().values[-2:]
+    v_hy = df_raw['HY_Spread'].dropna().values[-2:]
+    
     fng_score = int(max(0, min(100, 100 - (v_vix[-1] - 10) * 3.33)))
     if fng_score <= 25: fng_state, fng_col = "극단적 공포 · extreme fear", COLOR_DANGER
     elif fng_score <= 45: fng_state, fng_col = "공포 · fear", COLOR_WARN
@@ -670,35 +631,31 @@ if all(c in df.columns for c in req_cols):
     
     fng_diff_data = (fng_state, fng_col)
     
-    # 2. 매크로 데이터
-    v_dxy = df['DXY'].dropna().values[-2:]
-    v_jpy = df['USDJPY'].dropna().values[-2:]
-    v_10y = df['10Y'].dropna().values[-2:]
-    v_wti = df['WTI'].dropna().values[-2:]
+    v_dxy = df_raw['DXY'].dropna().values[-2:]
+    v_jpy = df_raw['USDJPY'].dropna().values[-2:]
+    v_10y = df_raw['10Y'].dropna().values[-2:]
+    v_wti = df_raw['WTI'].dropna().values[-2:]
     
-    # 3. 유동성 데이터
-    v_fed = df['Fed_BS'].dropna().values[-2:] / 10000  # Trillion 변환
-    v_res = df['Reserves'].dropna().values[-2:] / 10000 # Trillion 변환
-    v_rrp = df['RRP'].dropna().values[-2:] / 10      # Billion 변환
-    v_tga = df['TGA'].dropna().values[-2:] * 100     # Billion 변환 (기존 코드가 /100 상태이므로 *100 복구)
+    v_fed = df_raw['Fed_BS'].dropna().values[-2:] / 10000 
+    v_res = df_raw['Reserves'].dropna().values[-2:] / 10000 
+    v_rrp = df_raw['RRP'].dropna().values[-2:] / 10      
+    v_tga = df_raw['TGA'].dropna().values[-2:] * 100     
 
     board_html = f'''
     <div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
-        <!-- 1. 시장 -->
         <div style="margin-bottom: 2rem;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
                 <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>
                 <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향</div>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-                {render_mini_card("공포탐욕지수 (추정)", f"{fng_score}", fng_diff_data, "VIX 기반 추정치", "#f97316")}
+                {render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, "CNN Fear & Greed (Proxy)", "#f97316")}
                 {render_mini_card("VIX 변동성", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316")}
                 {render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316")}
                 {render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316")}
             </div>
         </div>
 
-        <!-- 2. 매크로 -->
         <div style="margin-bottom: 2rem;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
                 <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(168,85,247,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🌐</div>
@@ -712,17 +669,16 @@ if all(c in df.columns for c in req_cols):
             </div>
         </div>
 
-        <!-- 3. 유동성 -->
         <div>
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
                 <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💧</div>
                 <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">달러 유동성</div>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주'), "연준 대차대조표 · QE/QT", "#3b82f6")}
-                {render_mini_card("연준 지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주'), "은행 시스템 총 준비금", "#3b82f6")}
+                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "연준 대차대조표 · QE/QT", "#3b82f6")}
+                {render_mini_card("연준 지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주 대비'), "은행 시스템 총 준비금", "#3b82f6")}
                 {render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "연준 초과유동성 흡수", "#3b82f6")}
-                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주'), "재무부 일반계정", "#3b82f6")}
+                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주 대비'), "재무부 일반계정", "#3b82f6")}
             </div>
         </div>
     </div>
