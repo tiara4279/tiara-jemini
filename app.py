@@ -36,8 +36,8 @@ html, body, [class*="css"], [class*="st-"] {
 
 div[data-testid="stVerticalBlock"] > div {padding-bottom: 0.1rem;}
 
-/* 라디오 버튼 텍스트 색상 */
-.stRadio label { color: #cbd5e1 !important; font-size: 0.85rem !important; }
+/* 라디오 버튼 텍스트 색상 (연노랑 포인트) */
+.stRadio label { color: #fef08a !important; font-size: 0.85rem !important; }
 
 /* 고급스러운 골드 그라데이션 구분선 */
 hr {
@@ -78,7 +78,7 @@ def custom_header(icon, title, desc):
     <span style="font-size: 1.8rem;">{icon}</span>
     <h2 style="margin: 0; padding: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{title}</h2>
     </div>
-    <div style="font-size: 0.9rem; color: rgba(255,255,255,0.6); font-weight: 500; margin-left: 4px;">{desc}</div>
+    <div style="font-size: 0.9rem; color: #fef08a; opacity: 0.9; font-weight: 500; margin-left: 4px;">{desc}</div>
     </div>""".replace('\n', '')
     st.markdown(html, unsafe_allow_html=True)
 
@@ -169,7 +169,7 @@ def fetch_dashboard_data():
             '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
         })
         
-        # [핵심 버그 수정] 타임존 충돌 방지: Yahoo 데이터의 타임존을 강제로 제거하여 FRED와 날짜를 완벽하게 일치시킴
+        # 타임존 충돌 방지: Yahoo 데이터의 타임존을 강제로 제거하여 FRED와 날짜를 완벽하게 일치시킴
         if not df_yf.empty and hasattr(df_yf.index, 'tz') and df_yf.index.tz is not None:
             df_yf.index = df_yf.index.tz_localize(None)
     except Exception:
@@ -219,7 +219,7 @@ def fetch_dashboard_data():
 with st.spinner('데이터를 수집하고 정밀 분석 중입니다...'):
     df, df_raw = fetch_dashboard_data()
 
-# 데이터 수집 완전 실패에 대한 방어 로직 (열 개수 확인)
+# 데이터 수집 완전 실패에 대한 방어 로직
 if df.empty or len(df.columns) < 5:
     st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
     st.stop()
@@ -228,7 +228,7 @@ if df.empty or len(df.columns) < 5:
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
 COLOR_WARN = "#facc15"   # 주의 (골드 옐로우)
 COLOR_DANGER = "#f87171" # 경계/위험 (라이트 레드/핑크)
-COLOR_NEUTRAL = "#94a3b8" # 중립 (슬레이트 그레이)
+COLOR_NEUTRAL = "#fef08a" # 중립을 연노랑으로 변경
 ACCENT_GOLD = "#D4AF37"  # 강조 골드 (스튜디오 톤)
 ACCENT_KOREA = "#10b981" # 짙은 에메랄드 그린 (한국 자산)
 ACCENT_US = "#3b82f6"    # 시원한 블루 (미국 자산)
@@ -393,8 +393,8 @@ def format_chg_text(cur, prev, unit, is_inverted, is_sofr=False):
     dir_text = "상승" if (diff > 0 and unit in ['pt', '%']) else "증가" if diff > 0 else "하락" if unit in ['pt', '%'] else "감소"
     
     if abs(diff) < 0.001: 
-        return f"<span style='color: {color}; font-weight: bold;'>변동 없음</span>", color
-    return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>", color
+        return f"<span style='color: #fef08a; opacity: 0.8; font-weight: bold;'>변동 없음</span>".replace('\n', ''), color
+    return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>".replace('\n', ''), color
 
 # --- 안전한 데이터 추출 헬퍼 (결측치 원천 차단) ---
 def get_last_two(series, scale=1.0):
@@ -422,17 +422,18 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (줄바꿈 모두 제거하여 에러 원천 차단)
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (연노랑 텍스트 적용)
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
     
     card_bg = "linear-gradient(145deg, rgba(249,115,22,0.2) 0%, rgba(249,115,22,0.05) 100%)" if is_highlight else "#1e293b"
     border_css = "border: 1px solid rgba(249,115,22,0.4);" if is_highlight else "border: 1px solid rgba(255,255,255,0.05);"
-    title_color = "#ffffff" if is_highlight else "#cbd5e1"
-    footer_color = "rgba(255,255,255,0.6)" if is_highlight else "#64748b"
+    title_color = "#ffffff" if is_highlight else "#fef08a" # 연노랑 포인트
+    footer_color = "rgba(255,255,255,0.8)" if is_highlight else "#fef08a" # 연노랑 (투명도 조절)
+    footer_opacity = "1.0" if is_highlight else "0.7"
 
-    card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
+    card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; opacity: {footer_opacity}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
     if target_id:
         return f'<a href="#{target_id}" class="custom-link">{card_html}</a>'
     return card_html
@@ -473,13 +474,13 @@ def render_detailed_indicator(key, df, days):
     
     top_text_html = f"<div style='color: {ACCENT_GOLD}; font-size: 0.75rem; font-weight: 700; margin-bottom: 2px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
     
-    # 앵커 링크 연결을 위한 ID 부여 및 스크롤 마진 설정
+    # 앵커 링크 연결을 위한 ID 부여 및 연노랑 텍스트 적용
     header_html = f"""<div id="{key}" style="margin-top: 1rem; scroll-margin-top: 80px;">
     {top_text_html}
     <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
     <h3 style="margin: 0; padding: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{meta['name']}</h3>
     </div>
-    <div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
+    <div style="color: #fef08a; opacity: 0.9; font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
     </div>""".replace('\n', '')
     st.markdown(header_html, unsafe_allow_html=True)
     
@@ -501,7 +502,7 @@ def render_detailed_indicator(key, df, days):
         min_rate = min(df['10Y'].tail(days).min(), df['2Y'].tail(days).min())
         max_rate = max(df['10Y'].tail(days).max(), df['2Y'].tail(days).max())
         pad_rate = (max_rate - min_rate) * 0.2 if max_rate != min_rate else 0.5
-        fig.update_yaxes(range=[min_rate - pad_rate, max_rate + pad_rate], secondary_y=True, showgrid=False, tickfont=dict(color='rgba(255,255,255,0.4)'), zeroline=False)
+        fig.update_yaxes(range=[min_rate - pad_rate, max_rate + pad_rate], secondary_y=True, showgrid=False, tickfont=dict(color='#fef08a'), zeroline=False)
         
     else:
         fig = plotly_go.Figure()
@@ -510,11 +511,11 @@ def render_detailed_indicator(key, df, days):
         min_val, max_val = sub_df.min(), sub_df.max()
         padding = (max_val - min_val) * 0.15
         if padding == 0: padding = abs(min_val) * 0.05 if min_val != 0 else 1
-        fig.update_yaxes(range=[min_val - padding, max_val + padding], showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
+        fig.update_yaxes(range=[min_val - padding, max_val + padding], showgrid=True, gridcolor='rgba(255,255,255,0.05)', side='right', zeroline=False, tickfont=dict(color='#fef08a'))
 
     fig.update_xaxes(
         tickformat="%y.%m.%d", 
-        showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='rgba(255,255,255,0.5)')
+        showgrid=True, gridcolor='rgba(255,255,255,0.05)', zeroline=False, tickfont=dict(color='#fef08a')
     )
 
     if key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="rgba(248,113,113,0.6)", opacity=0.8)
@@ -522,14 +523,15 @@ def render_detailed_indicator(key, df, days):
     elif key == 'SOFR_IORB_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
     elif key == 'SOFR_EFFR_Spread': fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", opacity=0.8)
     
+    # [차트 높이 2배 증대 (220px -> 440px)]
     fig.update_layout(
         template="plotly_dark",
-        height=220, 
+        height=440, 
         margin=dict(l=10, r=10, t=30 if is_10y2y else 10, b=10),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
         hovermode='x unified',
         showlegend=is_10y2y,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='rgba(255,255,255,0.7)')) if is_10y2y else None
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#fef08a')) if is_10y2y else None
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{key}")
     
@@ -541,7 +543,7 @@ def render_detailed_indicator(key, df, days):
                 <span style="font-size: 16px;">{lvl[3]}</span>
                 <span style="font-weight: 800; font-size: 12px; color: #f8fafc;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
             </div>
-            <div style="font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.5;">{lvl[4]}</div>
+            <div style="font-size: 11.5px; color: #fef08a; opacity: 0.9; line-height: 1.5;">{lvl[4]}</div>
         </div>""".replace('\n', '')
 
     unified_card_html = f"""
@@ -550,19 +552,19 @@ def render_detailed_indicator(key, df, days):
             <div style="flex: 1; min-width: 260px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                     <span style="background: {status_color}20; color: {status_color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; border: 1px solid {status_color}40;">{status_label}</span>
-                    <span style="font-size: 11.5px; color: rgba(255,255,255,0.5); font-weight: 600;">최근 {selected_period_label} 기준</span>
+                    <span style="font-size: 11.5px; color: #fef08a; opacity: 0.9; font-weight: 600;">최근 {selected_period_label} 기준</span>
                 </div>
                 <div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px; color: #f8fafc;">{format_val(cur, meta['unit'], is_sofr)}</div>
-                <div style="font-size: 0.95rem; color: rgba(255,255,255,0.8); font-weight: 600;"><b style="color: {ACCENT_GOLD};">{meta['short_name']}</b> — {status_text}</div>
+                <div style="font-size: 0.95rem; color: #fef08a; opacity: 0.9; font-weight: 600;"><b style="color: {ACCENT_GOLD};">{meta['short_name']}</b> — {status_text}</div>
             </div>
             <div style="display: flex; gap: 24px; background: rgba(255,255,255,0.02); padding: 14px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
                 <div>
-                    <div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">1주 전 대비</div>
+                    <div style="font-size: 11px; color: #fef08a; opacity: 0.9; font-weight: 600; margin-bottom: 4px;">1주 전 대비</div>
                     <div style="font-size: 1rem;">{chg_1w_html}</div>
                 </div>
                 <div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
                 <div>
-                    <div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">3개월 전 대비</div>
+                    <div style="font-size: 11px; color: #fef08a; opacity: 0.9; font-weight: 600; margin-bottom: 4px;">3개월 전 대비</div>
                     <div style="font-size: 1rem;">{chg_3m_html}</div>
                 </div>
             </div>
@@ -570,7 +572,7 @@ def render_detailed_indicator(key, df, days):
         {extra_info_html}
         <div>
             <div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; color: {ACCENT_GOLD};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
-            <div style="font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; line-height: 1.6;">{meta['desc']}</div>
+            <div style="font-size: 0.85rem; color: #fef08a; opacity: 0.9; margin-bottom: 16px; line-height: 1.6;">{meta['desc']}</div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
                 {level_cards_html}
             </div>
@@ -619,28 +621,28 @@ if all(col in df.columns for col in ['EURUSD', 'USDJPY', 'USDCNY', 'GBPUSD']):
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{eur_cur:.4f}</div>
             <div style="color: {eur_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{eur_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 유로당 달러</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">1 유로당 달러</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">달러/엔 (USD/JPY)</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{jpy_cur:.2f}</div>
             <div style="color: {jpy_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{jpy_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 달러당 엔화</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">1 달러당 엔화</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">달러/위안 (USD/CNY)</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{cny_cur:.4f}</div>
             <div style="color: {cny_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{cny_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 달러당 위안화</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">1 달러당 위안화</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(212,175,55,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: #D4AF37; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">파운드/달러 (GBP/USD)</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{gbp_cur:.4f}</div>
             <div style="color: {gbp_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{gbp_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 파운드당 달러</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">1 파운드당 달러</div>
         </div>
     </div>
     """.replace('\n', '')
@@ -675,21 +677,21 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'USDKRW']):
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{kospi_dd_str}</div>
             <div style="color: {kospi_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">현재가: {kospi_cur:,.2f}</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">현재가: {kospi_cur:,.2f}</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(16,185,129,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_KOREA}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">코스닥</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{kosdaq_dd_str}</div>
             <div style="color: {kosdaq_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">현재가: {kosdaq_cur:,.2f}</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">현재가: {kosdaq_cur:,.2f}</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(16,185,129,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_KOREA}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">원달러 환율</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{usdkrw_cur:,.0f}원</div>
             <div style="color: {usdkrw_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{usdkrw_chg_str} 전일</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">KRW/USD</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">KRW/USD</div>
         </div>
     </div>
     """.replace('\n', '')
@@ -731,28 +733,28 @@ if all(col in df.columns for col in ['SP500', 'NASDAQ', 'ES_F', 'NQ_F']):
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{sp500_dd_str}</div>
             <div style="color: {sp500_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">현재가: {sp500_cur:,.2f}</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">현재가: {sp500_cur:,.2f}</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(59,130,246,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_US}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">나스닥 종합</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{nasdaq_dd_str}</div>
             <div style="color: {nasdaq_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">ATH 대비 낙폭</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">현재가: {nasdaq_cur:,.2f}</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">현재가: {nasdaq_cur:,.2f}</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(59,130,246,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_US}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">S&P 500 선물</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{es_cur:,.2f}</div>
             <div style="color: {es_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{es_chg_str} 전일 대비</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">ES=F · 실시간 야간 지표</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">ES=F · 실시간 야간 지표</div>
         </div>
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(59,130,246,0.15); border-radius: 12px; padding: 20px;">
             <div style="color: {ACCENT_US}; font-size: 0.95rem; font-weight: 700; margin-bottom: 8px;">나스닥 100 선물</div>
             <div style="color: #ffffff; font-size: 2.2rem; font-weight: 900; line-height: 1.2;">{nq_cur:,.2f}</div>
             <div style="color: {nq_color}; font-size: 0.95rem; font-weight: 700; margin-top: 5px;">{nq_chg_str} 전일 대비</div>
             <div style="border-top: 1px solid rgba(255,255,255,0.05); margin: 15px 0 10px 0;"></div>
-            <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">NQ=F · 실시간 야간 지표</div>
+            <div style="color: #fef08a; opacity: 0.8; font-size: 0.8rem;">NQ=F · 실시간 야간 지표</div>
         </div>
     </div>
     """.replace('\n', '')
@@ -804,6 +806,7 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
+    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
@@ -881,21 +884,23 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
     fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#60a5fa', width=2.5)), secondary_y=False)
     fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#f87171', width=1.5)), secondary_y=True)
+    
+    # [차트 높이 2배 증대 (360px -> 600px)]
     fig_liq.update_layout(
         title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", 
-        height=360, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10),
+        height=600, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10),
         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='rgba(255,255,255,0.5)')),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='rgba(255,255,255,0.5)')),
-        yaxis2=dict(showgrid=False, tickfont=dict(color='rgba(255,255,255,0.5)'))
+        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='#fef08a')),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='#fef08a')),
+        yaxis2=dict(showgrid=False, tickfont=dict(color='#fef08a'))
     )
-    fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False, title_font=dict(color='rgba(255,255,255,0.6)'))
-    fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True, title_font=dict(color='rgba(255,255,255,0.6)'))
+    fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False, title_font=dict(color='#fef08a'))
+    fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True, title_font=dict(color='#fef08a'))
     st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False}, key="net_liq_chart")
     
     st.markdown("""<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(212,175,55,0.3); border-radius: 14px; padding: 20px; margin-top: 15px; margin-bottom: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
 <div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 10px; color:#D4AF37;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
-<div style="font-size: 0.85rem; color: rgba(255,255,255,0.7); line-height: 1.6;">
+<div style="font-size: 0.85rem; color: #fef08a; opacity: 0.9; line-height: 1.6;">
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
 통상적으로 <b style="color:#60a5fa">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#f87171">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
@@ -919,14 +924,15 @@ if all(col in df.columns for col in ['10Y', 'T10YIE', 'ACMTP10']):
     # 우축 (Right Axis)
     fig_decomp.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['ACMTP10'].tail(selected_days), name="10 Year TP (우)", line=dict(color='#f97316', width=2)), secondary_y=True)
 
+    # [차트 높이 대폭 증대 (450px -> 600px)]
     fig_decomp.update_layout(
-        height=450, hovermode="x unified", margin=dict(t=30, b=0, l=10, r=10),
+        height=600, hovermode="x unified", margin=dict(t=30, b=0, l=10, r=10),
         template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='rgba(255,255,255,0.7)'))
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='#fef08a'))
     )
-    fig_decomp.update_yaxes(title_text="금리 (%)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.05)', title_font=dict(color='rgba(255,255,255,0.6)'), tickfont=dict(color='rgba(255,255,255,0.5)'))
-    fig_decomp.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, showgrid=False, title_font=dict(color='rgba(255,255,255,0.6)'), tickfont=dict(color='rgba(255,255,255,0.5)'))
-    fig_decomp.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='rgba(255,255,255,0.5)'))
+    fig_decomp.update_yaxes(title_text="금리 (%)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.05)', title_font=dict(color='#fef08a'), tickfont=dict(color='#fef08a'))
+    fig_decomp.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, showgrid=False, title_font=dict(color='#fef08a'), tickfont=dict(color='#fef08a'))
+    fig_decomp.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='#fef08a'))
     
     st.plotly_chart(fig_decomp, use_container_width=True, config={'displayModeBar': False})
 else:
@@ -1016,14 +1022,14 @@ def generate_report_html(df, days):
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
             <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 시장 심리 및 유동성</div>
-                <div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
                     <div>• {vix_msg}</div>
                     <div>• {sys_msg}</div>
                 </div>
             </div>
             <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 매크로 및 신용 환경</div>
-                <div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
                     <div>• {sofr_msg}</div>
                     <div>• {totll_msg}</div>
                     <div>• {yield_msg}</div>
