@@ -10,30 +10,61 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS 및 메타 태그 ---
+# --- 커스텀 CSS 및 메타 태그 (고급 디자인 적용) ---
 st.markdown("""
 <meta name="google" content="notranslate">
 <meta name="robots" content="notranslate">
 <style>
-/* 전반적인 폰트 및 여백 조정 */
+/* 프리텐다드 폰트 적용 및 전체 테마 고급화 */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css");
+
+html, body, [class*="css"], [class*="st-"] {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif !important;
+}
+
 div[data-testid="stVerticalBlock"] > div {
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.2rem;
 }
+
+/* 아름다운 구분선 */
 hr {
-    margin-top: 3rem;
-    margin-bottom: 3rem;
-    border-color: rgba(128,128,128,0.2);
+    margin-top: 4rem;
+    margin-bottom: 4rem;
+    border: 0;
+    height: 1px;
+    background: linear-gradient(to right, rgba(128,128,128,0), rgba(128,128,128,0.2), rgba(128,128,128,0));
 }
+
+/* 스크롤바 미세조정 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(128,128,128,0.02); }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.4); }
 </style>
 <div class="notranslate">
 """, unsafe_allow_html=True)
 
-st.title("🌐 시장 경제 지표 대시보드")
-st.markdown("시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터는 매일 자동 갱신됩니다)")
+# --- 커스텀 섹션 헤더 함수 ---
+def custom_header(icon, title, desc):
+    st.markdown(f"""
+    <div style="margin-top: 1rem; margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px;">
+            <span style="font-size: 2.2rem;">{icon}</span>
+            <h2 style="margin: 0; padding: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px;">{title}</h2>
+        </div>
+        <div style="font-size: 1.05rem; color: #888; font-weight: 500; margin-left: 4px;">{desc}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+custom_header("🌐", "시장 경제 지표 대시보드", "시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터 매일 자동 갱신)")
 
 # --- 기간 선택 컨트롤 ---
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("#### ⏱️ 추이 기준 기간 선택")
+st.markdown("""
+<div style="font-size: 0.95rem; font-weight: 700; color: #607D8B; margin-bottom: 8px; margin-top: 20px;">
+    ⏱️ 추이 기준 기간 선택
+</div>
+""", unsafe_allow_html=True)
 period_options = {"1주일": 5, "1개월": 21, "3개월": 63, "6개월": 126, "1년": 252, "3년": 756}
 selected_period_label = st.radio("기간", list(period_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
 selected_days = period_options[selected_period_label]
@@ -45,7 +76,6 @@ def load_data():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
-    # 10Y(DGS10)와 2Y(DGS2) 개별 데이터 수집 추가
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
@@ -99,7 +129,7 @@ def load_data():
     
     return df_merged
 
-with st.spinner('데이터를 수집하고 분석하는 중입니다...'):
+with st.spinner('데이터를 수집하고 정밀 분석 중입니다...'):
     df = load_data()
 
 if df.empty or len(df) < 6:
@@ -107,10 +137,10 @@ if df.empty or len(df) < 6:
     st.stop()
 
 # --- 색상 테마 설정 ---
-COLOR_SAFE = "#1976D2"   # 긍정/안정 (파랑 - 눈 피로 완화)
-COLOR_WARN = "#E67E22"   # 주의 (선명한 귤색/주황색 - 빨강과 명확히 구분됨)
+COLOR_SAFE = "#1976D2"   # 긍정/안정 (파랑)
+COLOR_WARN = "#E67E22"   # 주의 (선명한 주황)
 COLOR_DANGER = "#D32F2F" # 경계/위험 (진한 빨강)
-COLOR_NEUTRAL = "#607D8B" # 중립 (블루 그레이 - 안정의 파랑과 구분)
+COLOR_NEUTRAL = "#607D8B" # 중립 (블루 그레이)
 
 # --- 지표별 평가 함수 및 메타데이터 ---
 def eval_vix(v, d):
@@ -300,56 +330,42 @@ def render_detailed_indicator(key, df, days):
     chg_1w_html, _ = format_chg_text(cur, val_1w, meta['unit'], is_inverted, is_sofr)
     chg_3m_html, _ = format_chg_text(cur, val_3m, meta['unit'], is_inverted, is_sofr)
 
-    # (신규) 장단기 금리차의 경우 10년물/2년물 현재 금리를 보여주는 특별 알림 추가
+    # 장단기 금리차 특별 알림 HTML
     extra_info_html = ""
     if key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns:
         try:
             val_10y = df['10Y'].dropna().iloc[-1]
             val_2y = df['2Y'].dropna().iloc[-1]
-            extra_info_html = f"""<div style="font-size: 14.5px; background-color: rgba(128,128,128,0.1); padding: 10px 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(128,128,128,0.15);">
-💡 <b>상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
-따라서 두 금리의 차이(10년물 - 2년물)는 <b>{cur:.2f}%</b>가 됩니다.
+            extra_info_html = f"""<div style="font-size: 0.95rem; background-color: rgba(25,118,210,0.04); padding: 16px 20px; border-radius: 12px; margin-top: 15px; margin-bottom: 25px; border: 1px solid rgba(25,118,210,0.15);">
+<b style="color: {COLOR_SAFE};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
+따라서 두 금리의 차이(10년물 - 2년물)는 <b style="color:{status_color}">{cur:.2f}%</b>가 됩니다.
 </div>"""
         except:
             pass
     
     # 1. 헤더 (타이틀 및 메타 정보)
-    if 'top_text' in meta:
-        st.markdown(f"<div style='color: #607D8B; font-size: 14px; font-weight: bold; margin-bottom: 2px;'>{meta['top_text']}</div>", unsafe_allow_html=True)
-    
-    st.markdown(f"<h3 style='margin-bottom: 5px; margin-top: 0px;'>{meta['name']}</h3>", unsafe_allow_html=True)
-    st.markdown(f"<div style='color: #888; font-size: 14px; margin-bottom: 15px;'>{meta['meta']}</div>", unsafe_allow_html=True)
+    top_text_html = f"<div style='color: #607D8B; font-size: 0.85rem; font-weight: 700; margin-bottom: 4px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
+    st.markdown(f"""
+    <div style="margin-top: 1rem;">
+        {top_text_html}
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;">
+            <h3 style="margin: 0; padding: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px;">{meta['name']}</h3>
+        </div>
+        <div style="color: #888; font-size: 0.85rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # 2. Plotly 차트
     fig = plotly_go.Figure()
-    
     is_10y2y = (key == '10Y_2Y' and '10Y' in df.columns and '2Y' in df.columns)
     
     if is_10y2y:
-        # 10년물 국채 금리 (파란색)
-        fig.add_trace(plotly_go.Scatter(
-            x=sub_df.index, y=df['10Y'].tail(days), mode='lines',
-            name='10년물 금리', line=dict(color='#2196F3', width=1.5), opacity=0.8
-        ))
-        # 2년물 국채 금리 (빨간색)
-        fig.add_trace(plotly_go.Scatter(
-            x=sub_df.index, y=df['2Y'].tail(days), mode='lines',
-            name='2년물 금리', line=dict(color='#F44336', width=1.5), opacity=0.8
-        ))
-        # 장단기 금리차 (연두색)
-        fig.add_trace(plotly_go.Scatter(
-            x=sub_df.index, y=sub_df, mode='lines',
-            name='금리차(10Y-2Y)', line=dict(color='#8BC34A', width=3.5),
-            fill='tozeroy', fillcolor=hex_to_rgba('#8BC34A', 0.15)
-        ))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['10Y'].tail(days), mode='lines', name='10년물 금리', line=dict(color='#2196F3', width=1.5), opacity=0.8))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=df['2Y'].tail(days), mode='lines', name='2년물 금리', line=dict(color='#F44336', width=1.5), opacity=0.8))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', name='금리차(10Y-2Y)', line=dict(color='#8BC34A', width=3.5), fill='tozeroy', fillcolor=hex_to_rgba('#8BC34A', 0.15)))
     else:
-        fig.add_trace(plotly_go.Scatter(
-            x=sub_df.index, y=sub_df, mode='lines',
-            line=dict(color=status_color, width=2.5),
-            fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)
-        ))
+        fig.add_trace(plotly_go.Scatter(x=sub_df.index, y=sub_df, mode='lines', line=dict(color=status_color, width=2.5), fill='tozeroy', fillcolor=hex_to_rgba(status_color, 0.1)))
 
-    # 차트 기준선 추가 로직 (VIX 30, MOVE 100, 금리차 0 등)
     if key == '10Y_2Y': fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     elif key == 'VIX': fig.add_hline(y=30, line_dash="dash", line_color="red", opacity=0.3)
     elif key == 'MOVE': fig.add_hline(y=140, line_dash="dash", line_color="red", opacity=0.3)
@@ -357,55 +373,61 @@ def render_detailed_indicator(key, df, days):
     
     fig.update_layout(
         height=280, 
-        margin=dict(l=0, r=0, t=30 if is_10y2y else 10, b=0),
-        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)'),
-        yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right'),
+        margin=dict(l=10, r=10, t=30 if is_10y2y else 10, b=10),
+        xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', zeroline=False),
+        yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', side='right', zeroline=False),
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+        hovermode='x unified',
         showlegend=is_10y2y,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1) if is_10y2y else None
     )
-    # st.plotly_chart 사용시 key 값을 주어 중복 ID 에러 방지
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"chart_{key}")
     
-    # 3. 요약 박스 (Summary Box) - 들여쓰기 제거 및 short_name 적용
-    summary_html = f"""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-top: 10px; margin-bottom: 20px;">
-<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-<span style="background-color: rgba(128,128,128,0.2); padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold; opacity: 0.8;">최근 {selected_period_label}</span>
-<span style="background-color: {status_color}20; color: {status_color}; border: 1px solid {status_color}50; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: bold;">{status_label}</span>
-<span style="font-size: 26px; font-weight: 900;">{format_val(cur, meta['unit'], is_sofr)}</span>
-</div>
-<div style="font-size: 15.5px; margin-bottom: 10px;">
-<b>{meta['short_name']} {format_val(cur, meta['unit'], is_sofr)}</b> — {status_text}
-</div>
-{extra_info_html}
-<div style="font-size: 14px; opacity: 0.85; margin-bottom: 12px;">
-1주 전({format_val(val_1w, meta['unit'], is_sofr)}) 대비 {chg_1w_html} · 3개월 전({format_val(val_3m, meta['unit'], is_sofr)}) 대비 {chg_3m_html}
-</div>
-<div style="font-size: 13px; opacity: 0.6; display: flex; align-items: center; gap: 5px;">
-📊 최근 {selected_period_label} 구간: 최저 {format_val(sub_df.min(), meta['unit'], is_sofr)} / 최고 {format_val(sub_df.max(), meta['unit'], is_sofr)}
-</div>
-</div>"""
-    st.markdown(summary_html, unsafe_allow_html=True)
-    
-    # 4. 설명 박스 (Explanation Grid) - 들여쓰기 제거
+    # 3. 프리미엄 통합 카드 HTML 생성
     level_cards_html = ""
     for lvl in meta['levels']:
-        level_cards_html += f"""<div style="border: 1px solid rgba(128,128,128,0.15); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 15px; background-color: rgba(128,128,128,0.03);">
-<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        level_cards_html += f"""<div style="flex: 1; min-width: 220px; background: rgba(128,128,128,0.03); border: 1px solid rgba(128,128,128,0.08); border-left: 4px solid {lvl[2]}; border-radius: 10px; padding: 16px;">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
 <span style="font-size: 18px;">{lvl[3]}</span>
-<span style="font-weight: bold; font-size: 14.5px;">{lvl[0]} — <span style="color:{lvl[2]}">{lvl[1]}</span></span>
+<span style="font-weight: 800; font-size: 14px;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
 </div>
-<div style="font-size: 13.5px; opacity: 0.75; line-height: 1.5;">{lvl[4]}</div>
+<div style="font-size: 13px; opacity: 0.75; line-height: 1.5;">{lvl[4]}</div>
 </div>"""
-        
-    expl_html = f"""<div style="background-color: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 25px; margin-bottom: 60px;">
-<div style="font-size: 16px; font-weight: bold; margin-bottom: 12px;">📌 {meta['short_name']}란?</div>
-<div style="font-size: 14.5px; opacity: 0.8; margin-bottom: 22px; line-height: 1.6;">{meta['desc']}</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px;">
-{level_cards_html}
+
+    unified_card_html = f"""<div style="background: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 16px; padding: 26px; margin-top: 10px; margin-bottom: 50px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(128,128,128,0.1); padding-bottom: 24px; margin-bottom: 24px; gap: 20px;">
+    <div style="flex: 1; min-width: 280px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <span style="background: {status_color}15; color: {status_color}; padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 800; border: 1px solid {status_color}30;">{status_label}</span>
+            <span style="font-size: 13px; opacity: 0.6; font-weight: 600;">최근 {selected_period_label} 기준</span>
+        </div>
+        <div style="font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px;">{format_val(cur, meta['unit'], is_sofr)}</div>
+        <div style="font-size: 1.05rem; opacity: 0.9; font-weight: 600;"><b>{meta['short_name']}</b> — {status_text}</div>
+    </div>
+    <div style="display: flex; gap: 30px; background: rgba(128,128,128,0.03); padding: 18px 24px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.06);">
+        <div>
+            <div style="font-size: 13px; opacity: 0.6; font-weight: 600; margin-bottom: 6px;">1주 전 대비</div>
+            <div style="font-size: 1.1rem;">{chg_1w_html}</div>
+        </div>
+        <div style="width: 1px; background: rgba(128,128,128,0.15);"></div>
+        <div>
+            <div style="font-size: 13px; opacity: 0.6; font-weight: 600; margin-bottom: 6px;">3개월 전 대비</div>
+            <div style="font-size: 1.1rem;">{chg_3m_html}</div>
+        </div>
+    </div>
+</div>
+
+{extra_info_html}
+
+<div>
+    <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 10px; color: {COLOR_NEUTRAL};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
+    <div style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 20px; line-height: 1.6;">{meta['desc']}</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
+        {level_cards_html}
+    </div>
 </div>
 </div>"""
-    st.markdown(expl_html, unsafe_allow_html=True)
+    st.markdown(unified_card_html, unsafe_allow_html=True)
 
 
 # ==========================================
@@ -413,19 +435,20 @@ def render_detailed_indicator(key, df, days):
 # ==========================================
 
 # --- 영웅 섹션: Net Liquidity vs SP500 ---
-st.header("🌊 핵심: 미국 유동성 흐름 (Net Liquidity)")
+custom_header("🌊", "미국 핵심 유동성 흐름", "Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
+
 if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
     fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
     fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['Net_Liquidity'].tail(selected_days), name="순유동성 (억 달러)", line=dict(color='#1976D2', width=2.5)), secondary_y=False)
     fig_liq.add_trace(plotly_go.Scatter(x=df.index[-selected_days:], y=df['SP500'].tail(selected_days), name="S&P 500", line=dict(color='#D32F2F', width=1.5)), secondary_y=True)
-    fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=0, r=0))
+    fig_liq.update_layout(title_text=f"Net Liquidity vs S&P 500 ({selected_period_label})", height=450, hovermode="x unified", margin=dict(t=50, b=0, l=10, r=10))
     fig_liq.update_yaxes(title_text="Net Liquidity (억 달러)", secondary_y=False)
     fig_liq.update_yaxes(title_text="S&P 500 Index", secondary_y=True)
     st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False}, key="net_liq_chart")
     
-    st.markdown("""<div style="background-color: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; padding: 20px; margin-bottom: 60px;">
-<div style="font-size: 16px; font-weight: bold; margin-bottom: 10px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
-<div style="font-size: 14.5px; opacity: 0.85; line-height: 1.6;">
+    st.markdown("""<div style="background: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.1); border-radius: 16px; padding: 24px; margin-top: 15px; margin-bottom: 60px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+<div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 12px; color:#607D8B;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
+<div style="font-size: 0.95rem; opacity: 0.85; line-height: 1.6;">
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
 통상적으로 <b style="color:#1976D2">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#D32F2F">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
@@ -434,7 +457,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 
 # --- 1. 시장 리스크 지표 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("🚨 1. 시장 리스크 및 스트레스 지표")
+custom_header("🚨", "1. 시장 리스크 및 스트레스 지표", "시장의 공포 심리와 시스템 위기 가능성을 경고합니다.")
 render_detailed_indicator('VIX', df, selected_days)
 render_detailed_indicator('MOVE', df, selected_days)
 render_detailed_indicator('10Y_2Y', df, selected_days)
@@ -443,7 +466,7 @@ render_detailed_indicator('FSI', df, selected_days)
 
 # --- 2. 유동성 창구 지표 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("🏦 2. 유동성을 좌우하는 핵심 창구")
+custom_header("🏦", "2. 유동성을 좌우하는 핵심 창구", "연준과 재무부의 실질적인 달러 공급/흡수 현황입니다.")
 render_detailed_indicator('Fed_BS', df, selected_days)
 render_detailed_indicator('WRESBAL_Ind', df, selected_days)
 render_detailed_indicator('Reserves', df, selected_days)
@@ -451,7 +474,7 @@ render_detailed_indicator('TGA', df, selected_days)
 
 # --- 3. 자금 시장 및 신용 지표 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("💰 3. 은행 신용 및 단기 자금 시장 (기관 자금 흐름)")
+custom_header("💰", "3. 은행 신용 및 단기 자금 시장", "실물 경제로의 자금 조달 여건과 기관 자금의 대피 흐름입니다.")
 render_detailed_indicator('RRP', df, selected_days)
 render_detailed_indicator('MMF', df, selected_days)
 render_detailed_indicator('TOTLL', df, selected_days)
@@ -460,14 +483,15 @@ render_detailed_indicator('Emergency_Loans', df, selected_days)
 
 # --- 4. 글로벌 매크로 지표 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("🌍 4. 인플레이션 및 글로벌 매크로")
+custom_header("🌍", "4. 인플레이션 및 글로벌 매크로", "글로벌 달러 유동성 환경과 향후 금리 인하 기대감을 측정합니다.")
 render_detailed_indicator('DXY', df, selected_days)
 render_detailed_indicator('T10YIE', df, selected_days)
 
 # --- 5. AI 리포트 ---
 st.markdown("<hr>", unsafe_allow_html=True)
-st.header("📝 AI 기반 매크로 종합 시황 리포트")
-def generate_report(df, days):
+custom_header("📝", "AI 매크로 종합 시황 진단", "모든 데이터를 종합하여 현재의 거시 경제 국면을 판독합니다.")
+
+def generate_report_html(df, days):
     sub_df = df.tail(days)
     if len(sub_df) < 2: return "데이터가 충분하지 않습니다."
     
@@ -481,38 +505,66 @@ def generate_report(df, days):
     totll_chg = safe(latest, 'TOTLL') - safe(start, 'TOTLL')
     dxy, bei, emerg_loans = safe(latest, 'DXY'), safe(latest, 'T10YIE'), safe(latest, 'Emergency_Loans')
     
-    report = []
-    report.append(f"### 📌 시장 심리 및 시스템 리스크 ({selected_period_label} 기준)")
-    if vix > 30: report.append(f"- **[위험 심리]** VIX가 {vix:.2f}로 공포 심리가 팽배합니다.")
-    else: report.append(f"- **[위험 심리]** VIX가 {vix:.2f}로 시장이 안정적인 흐름을 유지하고 있습니다.")
+    # 1. 심리/위험
+    if vix > 30: vix_msg = f"<b style='color:{COLOR_DANGER};'>위험 심리:</b> VIX가 {vix:.2f}로 시장에 공포 심리가 팽배합니다."
+    else: vix_msg = f"<b style='color:{COLOR_SAFE};'>위험 심리:</b> VIX가 {vix:.2f}로 시장이 안정적인 흐름을 유지 중입니다."
+    if emerg_loans > 500 or move > 140: sys_msg = f"<b style='color:{COLOR_DANGER};'>시스템 경고:</b> 연준 긴급 대출이나 채권 변동성이 높아 스트레스 징후가 관찰됩니다."
+    else: sys_msg = f"<b style='color:{COLOR_SAFE};'>시스템 안정:</b> 긴급 대출 잔액({emerg_loans:,.0f}억 달러)이 낮아 시스템 위기 징후는 없습니다."
     
-    if emerg_loans > 500 or move > 140: report.append("- **[시스템 경고]** 연준 긴급 대출이나 채권 변동성(MOVE)이 높아 스트레스 징후가 관찰됩니다.")
-    else: report.append(f"- **[시스템 안정]** 긴급 대출 잔액이 {emerg_loans:,.0f}억 달러로 시스템 위기 징후는 나타나지 않고 있습니다.")
+    # 2. 펀딩/신용
+    if sofr_spread > 0.05: sofr_msg = f"<b style='color:{COLOR_DANGER};'>조달 스트레스:</b> SOFR-IORB 스프레드({sofr_spread:.3f}%)가 확대되어 단기 달러 경색 조짐이 보입니다."
+    else: sofr_msg = f"<b style='color:{COLOR_SAFE};'>조달 안정:</b> SOFR-IORB 스프레드가 {sofr_spread:.3f}%로 단기 레포 시장 융통이 원활합니다."
+    if totll_chg < 0: totll_msg = f"<b style='color:{COLOR_DANGER};'>신용 축소:</b> 상업은행 대출이 감소({abs(totll_chg):,.0f}억 달러)하여 신용 공급 둔화 우려가 있습니다."
+    elif totll_chg > 0: totll_msg = f"<b style='color:{COLOR_SAFE};'>신용 팽창:</b> 상업은행 대출이 증가({totll_chg:,.0f}억 달러)하며 신용 창출이 이어지고 있습니다."
+    else: totll_msg = f"<b style='color:{COLOR_WARN};'>신용 정체:</b> 상업은행 대출 규모가 관망세를 보이고 있습니다."
 
-    report.append("\n### 📌 은행 신용 및 달러 펀딩 환경")
-    if sofr_spread > 0.05: report.append(f"- **[조달 스트레스]** SOFR-IORB 스프레드가 {sofr_spread:.3f}%로 확대되어 단기 시장 달러 경색 조짐이 보입니다.")
-    else: report.append(f"- **[조달 안정화]** SOFR-IORB 스프레드가 {sofr_spread:.3f}%로 단기 레포 시장의 달러 유동성이 원활합니다.")
-    
-    if totll_chg < 0: report.append(f"- **[신용 축소]** 상업은행 대출이 {abs(totll_chg):,.0f}억 달러 감소하여 실물 경제 신용 공급이 둔화되었습니다.")
-    elif totll_chg > 0: report.append(f"- **[신용 팽창]** 상업은행 대출이 {totll_chg:,.0f}억 달러 증가하며 신용 창출이 이어지고 있습니다.")
+    # 3. 매크로
+    if yield_curve < 0: yield_msg = f"<b style='color:{COLOR_DANGER};'>침체 선행:</b> 장단기 금리차({yield_curve:.2f}%) 역전으로 경기 둔화 가능성이 암시됩니다."
+    else: yield_msg = f"<b style='color:{COLOR_SAFE};'>성장 기대:</b> 장단기 금리차({yield_curve:.2f}%)가 우상향 곡선을 회복했습니다."
+    if bei > 2.5: bei_msg = f"<b style='color:{COLOR_DANGER};'>물가 불안:</b> 기대인플레({bei:.2f}%)가 높아 연준의 금리 인하 스탠스를 제약할 수 있습니다."
+    else: bei_msg = f"<b style='color:{COLOR_SAFE};'>물가 안정:</b> 기대인플레({bei:.2f}%)가 연준의 장기 목표 궤적에 부합합니다."
 
-    report.append("\n### 📌 매크로 경제 및 인플레이션")
-    if yield_curve < 0: report.append(f"- **[침체 선행]** 장단기 금리차가 {yield_curve:.2f}%로 역전 상태를 보이며 경기 둔화 가능성을 암시합니다.")
-    else: report.append(f"- **[안정적 금리차]** 장단기 금리차가 {yield_curve:.2f}%로 우상향 곡선을 회복했습니다.")
-    
-    if bei > 2.5: report.append(f"- **[물가 불안]** 10년물 기대인플레(BEI)가 {bei:.2f}%로 연준의 금리 인하 스탠스를 제약할 수 있습니다.")
-    else: report.append(f"- **[물가 안정]** 기대인플레(BEI)가 {bei:.2f}%로 연준의 물가 목표 궤적에 부합합니다.")
-
-    report.append("\n### 💡 종합 자산 배분 전략")
+    # 4. 결론 전략
     if (yield_curve < 0 and hy_spread > 5.0) or sofr_spread > 0.1:
-        report.append(f"👉 **[보수적 대응 권고]** 침체 시그널과 펀딩 스트레스가 겹쳤습니다. 현금 비중 확대를 권장합니다.")
+        strategy = f"침체 시그널과 펀딩 스트레스가 중첩되었습니다. <b>현금 및 채권 방어적 포트폴리오 비중 확대</b>를 강력히 권장합니다."
+        s_color = COLOR_DANGER
     elif liq_change > 0 and dxy < 105 and sofr_spread <= 0:
-        report.append(f"👉 **[위험 자산 선호]** 순유동성이 증가(+{liq_change:,.0f}억 달러)하고 달러({dxy:.2f})가 안정적입니다. 주식 등 위험 자산 랠리가 지지받을 환경입니다.")
+        strategy = f"순유동성이 증가(+{liq_change:,.0f}억 달러)하고 달러 가치가 안정적입니다. <b>위험 자산(주식)의 비중 유지 및 랠리 동참</b>이 유리한 환경입니다."
+        s_color = COLOR_SAFE
     else:
-        report.append("👉 **[관망 및 퀄리티 주식 집중]** 거시 지표들이 혼재되어 있습니다. 우량 기업 위주로 선별적인 접근이 필요합니다.")
+        strategy = f"거시 지표 방향성이 혼재되어 있습니다. <b>관망세 유지 및 대출 의존도가 낮은 우량(Quality) 기업 위주의 선별적 접근</b>이 필요합니다."
+        s_color = COLOR_WARN
 
-    return "\n".join(report)
+    return f"""
+    <div style="background: linear-gradient(145deg, rgba(25,118,210,0.02) 0%, rgba(25,118,210,0.06) 100%); border: 1px solid rgba(25,118,210,0.15); border-radius: 16px; padding: 32px; margin-bottom: 30px; box-shadow: 0 8px 32px rgba(25,118,210,0.05);">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #1976D2; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.4rem;">💡</span> 핵심 자산 배분 전략
+        </div>
+        <div style="font-size: 1.1rem; font-weight: 500; line-height: 1.6; margin-bottom: 30px; color: {s_color}; background: rgba(255,255,255,0.6); padding: 16px 20px; border-radius: 12px; border: 1px solid rgba(128,128,128,0.1);">
+            {strategy}
+        </div>
 
-st.info(generate_report(df, selected_days))
-st.caption(f"마지막 데이터 업데이트: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+            <div style="background: rgba(255,255,255,0.4); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div style="font-weight: 800; font-size: 1.05rem; margin-bottom: 16px; color: #607D8B; border-bottom: 2px solid rgba(128,128,128,0.1); padding-bottom: 8px;">📌 시장 심리 및 유동성</div>
+                <div style="line-height: 1.8; font-size: 0.95rem; opacity: 0.9;">
+                    <div>• {vix_msg}</div>
+                    <div>• {sys_msg}</div>
+                </div>
+            </div>
+            <div style="background: rgba(255,255,255,0.4); border: 1px solid rgba(128,128,128,0.1); border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                <div style="font-weight: 800; font-size: 1.05rem; margin-bottom: 16px; color: #607D8B; border-bottom: 2px solid rgba(128,128,128,0.1); padding-bottom: 8px;">📌 매크로 및 신용 환경</div>
+                <div style="line-height: 1.8; font-size: 0.95rem; opacity: 0.9;">
+                    <div>• {sofr_msg}</div>
+                    <div>• {totll_msg}</div>
+                    <div>• {yield_msg}</div>
+                    <div>• {bei_msg}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
+st.markdown(generate_report_html(df, selected_days), unsafe_allow_html=True)
+st.caption(f"마지막 데이터 갱신: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
 st.markdown("</div>", unsafe_allow_html=True)
