@@ -79,7 +79,7 @@ def custom_header(icon, title, desc):
     <h2 style="margin: 0; padding: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{title}</h2>
     </div>
     <div style="font-size: 0.9rem; color: rgba(255,255,255,0.6); font-weight: 500; margin-left: 4px;">{desc}</div>
-    </div>"""
+    </div>""".replace('\n', '')
     st.markdown(html, unsafe_allow_html=True)
 
 custom_header("👑", "시장 경제 지표 대시보드", "시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터 매일 자동 갱신)")
@@ -87,7 +87,7 @@ custom_header("👑", "시장 경제 지표 대시보드", "시장의 핵심 유
 # --- 기간 선택 컨트롤 ---
 html_period = """<div style="font-size: 0.85rem; font-weight: 700; color: #D4AF37; margin-bottom: 6px; margin-top: 15px;">
 ⏱️ 추이 기준 기간 선택
-</div>"""
+</div>""".replace('\n', '')
 st.markdown(html_period, unsafe_allow_html=True)
 period_options = {"1주일": 5, "1개월": 21, "3개월": 63, "6개월": 126, "1년": 252, "3년": 756}
 selected_period_label = st.radio("기간", list(period_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
@@ -113,7 +113,6 @@ def fetch_real_fng():
         return None
 
 # --- 데이터 로드 함수 (강건한 결측치 처리 및 타임존 충돌 완벽 해결) ---
-# 함수명을 변경하여 꼬여버린 과거 캐시를 강제 초기화(Bust Cache) 합니다.
 @st.cache_data(ttl=3600*6) 
 def fetch_dashboard_data():
     end = datetime.datetime.today()
@@ -423,7 +422,7 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (줄바꿈 모두 제거하여 에러 원천 차단)
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
@@ -433,17 +432,7 @@ def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id=
     title_color = "#ffffff" if is_highlight else "#cbd5e1"
     footer_color = "rgba(255,255,255,0.6)" if is_highlight else "#64748b"
 
-    card_html = f"""
-    <div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;">
-        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div>
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;">
-            <div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div>
-            <div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div>
-        </div>
-        <div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div>
-        <div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div>
-    </div>
-    """
+    card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
     if target_id:
         return f'<a href="#{target_id}" class="custom-link">{card_html}</a>'
     return card_html
@@ -479,7 +468,7 @@ def render_detailed_indicator(key, df, days):
             extra_info_html = f"""<div style="font-size: 0.85rem; background-color: rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);">
             <b style="color: {ACCENT_GOLD};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
             따라서 두 금리의 차이(10년물 - 2년물)는 <b style="color:{status_color}">{cur:.2f}%</b>가 됩니다.
-            </div>"""
+            </div>""".replace('\n', '')
         except: pass
     
     top_text_html = f"<div style='color: {ACCENT_GOLD}; font-size: 0.75rem; font-weight: 700; margin-bottom: 2px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
@@ -491,7 +480,7 @@ def render_detailed_indicator(key, df, days):
     <h3 style="margin: 0; padding: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{meta['name']}</h3>
     </div>
     <div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
-    </div>"""
+    </div>""".replace('\n', '')
     st.markdown(header_html, unsafe_allow_html=True)
     
     # ---------------------------------------------------------
@@ -553,7 +542,7 @@ def render_detailed_indicator(key, df, days):
                 <span style="font-weight: 800; font-size: 12px; color: #f8fafc;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
             </div>
             <div style="font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.5;">{lvl[4]}</div>
-        </div>"""
+        </div>""".replace('\n', '')
 
     unified_card_html = f"""
     <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px; margin-top: 8px; margin-bottom: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
@@ -587,7 +576,7 @@ def render_detailed_indicator(key, df, days):
             </div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     st.markdown(unified_card_html, unsafe_allow_html=True)
 
 
@@ -596,7 +585,7 @@ def render_detailed_indicator(key, df, days):
 # ==========================================
 
 # --- 세계 외환 지표 섹션 ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 30px;'><span style='margin-right: 8px;'>💱</span> 세계 외환 지표</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 30px;'><span style='margin-right: 8px;'>💱</span> 세계 외환 지표</div>".replace('\n', ''), unsafe_allow_html=True)
 
 if all(col in df.columns for col in ['EURUSD', 'USDJPY', 'USDCNY', 'GBPUSD']):
     eur_cur = df['EURUSD'].iloc[-1]
@@ -654,11 +643,11 @@ if all(col in df.columns for col in ['EURUSD', 'USDJPY', 'USDCNY', 'GBPUSD']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 파운드당 달러</div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     st.markdown(global_assets_html, unsafe_allow_html=True)
 
 # --- 한국 경제 지표 섹션 ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇰🇷</span> 한국 경제 지표</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇰🇷</span> 한국 경제 지표</div>".replace('\n', ''), unsafe_allow_html=True)
 
 if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'USDKRW']):
     kospi_cur = df['KOSPI'].iloc[-1]
@@ -703,12 +692,12 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'USDKRW']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">KRW/USD</div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     st.markdown(korean_assets_html, unsafe_allow_html=True)
 
 
 # --- 미국 증시 및 선물 섹션 ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇺🇸</span> 미국 지수 및 선물</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>🇺🇸</span> 미국 지수 및 선물</div>".replace('\n', ''), unsafe_allow_html=True)
 
 if all(col in df.columns for col in ['SP500', 'NASDAQ', 'ES_F', 'NQ_F']):
     sp500_cur = df['SP500'].iloc[-1]
@@ -766,12 +755,12 @@ if all(col in df.columns for col in ['SP500', 'NASDAQ', 'ES_F', 'NQ_F']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">NQ=F · 실시간 야간 지표</div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     st.markdown(us_assets_html, unsafe_allow_html=True)
 
 
 # --- 핵심 매크로 및 유동성 요약 보드 (클릭 앵커 추가 & 3가지 카테고리로 재구성) ---
-st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>📋</span> 핵심 지표 요약 보드</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 1.1rem; font-weight: 800; color: #f8fafc; margin-bottom: 15px; margin-top: 10px;'><span style='margin-right: 8px;'>📋</span> 핵심 지표 요약 보드</div>".replace('\n', ''), unsafe_allow_html=True)
 
 # 앵커 연결을 위해 요청하신 세부 지표들과 1:1 완벽 맵핑
 req_cols = ['VIX', 'MOVE', '10Y_2Y', 'HY_Spread', 'FSI', 'Fed_BS', 'Reserves', 'TGA', 'RRP', 'MMF', 'TOTLL', 'SOFR_IORB_Spread', 'SOFR_EFFR_Spread', 'Emergency_Loans']
@@ -882,7 +871,7 @@ if all(c in df_raw.columns for c in req_cols):
             </div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     st.markdown(board_html, unsafe_allow_html=True)
 
 
@@ -910,10 +899,10 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
 통상적으로 <b style="color:#60a5fa">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#f87171">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
-</div>""", unsafe_allow_html=True)
+</div>""".replace('\n', ''), unsafe_allow_html=True)
 
 # --- 미국 10년물 국채금리 분해 (Decomposition) ---
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("🇺🇸", "미국 10년물 국채금리 분해 (Decomposition)", "국채금리를 '단기금리 기대경로', '기대인플레이션', '기간 프리미엄'으로 분해하여 시장의 진짜 의도를 파악합니다.")
 
 if all(col in df.columns for col in ['10Y', 'T10YIE', 'ACMTP10']):
@@ -944,7 +933,7 @@ else:
     st.info("💡 현재 연준(FRED) 서버에서 '기간 프리미엄(ACMTP10)' 등의 데이터를 일시적으로 제공하지 않아 차트를 생략합니다. (API 연동 지연)")
 
 
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("🚨", "1. 시장 리스크 및 스트레스 지표", "시장의 공포 심리와 시스템 위기 가능성을 경고합니다.")
 render_detailed_indicator('VIX', df, selected_days)
 render_detailed_indicator('MOVE', df, selected_days)
@@ -952,14 +941,14 @@ render_detailed_indicator('10Y_2Y', df, selected_days)
 render_detailed_indicator('HY_Spread', df, selected_days)
 render_detailed_indicator('FSI', df, selected_days)
 
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("🏦", "2. 유동성을 좌우하는 핵심 창구", "연준과 재무부의 실질적인 달러 공급/흡수 현황입니다.")
 render_detailed_indicator('Fed_BS', df, selected_days)
 render_detailed_indicator('WRESBAL_Ind', df, selected_days)
 render_detailed_indicator('Reserves', df, selected_days)
 render_detailed_indicator('TGA', df, selected_days)
 
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("💰", "3. 은행 신용 및 단기 자금 시장", "실물 경제로의 자금 조달 여건과 기관 자금의 대피 흐름입니다.")
 render_detailed_indicator('RRP', df, selected_days)
 render_detailed_indicator('MMF', df, selected_days)
@@ -968,12 +957,12 @@ render_detailed_indicator('SOFR_IORB_Spread', df, selected_days)
 render_detailed_indicator('SOFR_EFFR_Spread', df, selected_days)
 render_detailed_indicator('Emergency_Loans', df, selected_days)
 
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("🌍", "4. 인플레이션 및 글로벌 매크로", "글로벌 달러 유동성 환경과 향후 금리 인하 기대감을 측정합니다.")
 render_detailed_indicator('DXY', df, selected_days)
 render_detailed_indicator('T10YIE', df, selected_days)
 
-st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 custom_header("📝", "AI 매크로 종합 시황 진단", "모든 데이터를 종합하여 현재의 거시 경제 국면을 판독합니다.")
 
 def generate_report_html(df, days):
@@ -1043,9 +1032,9 @@ def generate_report_html(df, days):
             </div>
         </div>
     </div>
-    """
+    """.replace('\n', '')
     return html_report
 
 st.markdown(generate_report_html(df, selected_days), unsafe_allow_html=True)
 st.caption(f"마지막 데이터 갱신: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
-st.markdown("</div>", unsafe_allow_html=True)
+st.markdown("</div>".replace('\n', ''), unsafe_allow_html=True)
