@@ -73,20 +73,22 @@ a.custom-link {
 
 # --- 커스텀 섹션 헤더 함수 ---
 def custom_header(icon, title, desc):
-    st.markdown(f"""<div style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
-<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
-<span style="font-size: 1.8rem;">{icon}</span>
-<h2 style="margin: 0; padding: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{title}</h2>
-</div>
-<div style="font-size: 0.9rem; color: rgba(255,255,255,0.6); font-weight: 500; margin-left: 4px;">{desc}</div>
-</div>""".replace('\n', ''), unsafe_allow_html=True)
+    html = f"""<div style="margin-top: 0.5rem; margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+    <span style="font-size: 1.8rem;">{icon}</span>
+    <h2 style="margin: 0; padding: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{title}</h2>
+    </div>
+    <div style="font-size: 0.9rem; color: rgba(255,255,255,0.6); font-weight: 500; margin-left: 4px;">{desc}</div>
+    </div>"""
+    st.markdown(html, unsafe_allow_html=True)
 
 custom_header("👑", "시장 경제 지표 대시보드", "시장의 핵심 유동성 흐름과 매크로 지표를 심층적으로 추적합니다. (데이터 매일 자동 갱신)")
 
 # --- 기간 선택 컨트롤 ---
-st.markdown("""<div style="font-size: 0.85rem; font-weight: 700; color: #D4AF37; margin-bottom: 6px; margin-top: 15px;">
+html_period = """<div style="font-size: 0.85rem; font-weight: 700; color: #D4AF37; margin-bottom: 6px; margin-top: 15px;">
 ⏱️ 추이 기준 기간 선택
-</div>""".replace('\n', ''), unsafe_allow_html=True)
+</div>"""
+st.markdown(html_period, unsafe_allow_html=True)
 period_options = {"1주일": 5, "1개월": 21, "3개월": 63, "6개월": 126, "1년": 252, "3년": 756}
 selected_period_label = st.radio("기간", list(period_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
 selected_days = period_options[selected_period_label]
@@ -110,13 +112,13 @@ def fetch_real_fng():
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (강건한 결측치 처리 적용) ---
-@st.cache_data(ttl=3600*12) 
-def load_data():
+# --- 데이터 로드 함수 (강건한 결측치 처리 및 타임존 충돌 완벽 해결) ---
+# 함수명을 변경하여 꼬여버린 과거 캐시를 강제 초기화(Bust Cache) 합니다.
+@st.cache_data(ttl=3600*6) 
+def fetch_dashboard_data():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
-    # ACMTP10 (10년물 기간 프리미엄) 지표 추가
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
@@ -126,13 +128,17 @@ def load_data():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    df_fred = pd.DataFrame()
+    # FRED 데이터 안전하게 병합
+    fred_list = []
     for name, series_id in fred_series.items():
         try:
             data = web.DataReader(series_id, 'fred', start, end)
-            df_fred[name] = data[series_id]
-        except Exception as e:
+            data = data.rename(columns={series_id: name})
+            fred_list.append(data)
+        except Exception:
             pass 
+            
+    df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
     # 단위 환산 (억 달러로 통일)
     if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
@@ -150,8 +156,12 @@ def load_data():
     df_yf = pd.DataFrame()
     try:
         yf_data = yf.download(tickers, start=start, end=end, progress=False)
-        if 'Close' in yf_data.columns: df_yf = yf_data['Close']
-        else: df_yf = yf_data
+        # MultiIndex 컬럼 안전하게 처리
+        if isinstance(yf_data.columns, pd.MultiIndex):
+            df_yf = yf_data['Close'] if 'Close' in yf_data.columns.levels[0] else yf_data
+        else:
+            df_yf = yf_data['Close'] if 'Close' in yf_data.columns else yf_data
+            
         df_yf = df_yf.rename(columns={
             '^GSPC': 'SP500', '^MOVE': 'MOVE', 'DX-Y.NYB': 'DXY', 
             '^KS11': 'KOSPI', '^KQ11': 'KOSDAQ', 'KRW=X': 'USDKRW',
@@ -159,11 +169,16 @@ def load_data():
             'EURUSD=X': 'EURUSD', 'GBPUSD=X': 'GBPUSD', 'CNY=X': 'USDCNY',
             '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
         })
-    except Exception as e:
+        
+        # [핵심 버그 수정] 타임존 충돌 방지: Yahoo 데이터의 타임존을 강제로 제거하여 FRED와 날짜를 완벽하게 일치시킴
+        if not df_yf.empty and hasattr(df_yf.index, 'tz') and df_yf.index.tz is not None:
+            df_yf.index = df_yf.index.tz_localize(None)
+    except Exception:
         pass
 
-    # 원본 데이터 보존 (변동 없음 버그 해결용)
+    # 원본 데이터 보존 (타임존 맞춘 후 병합)
     df_raw = pd.concat([df_fred, df_yf], axis=1)
+    df_raw = df_raw.sort_index() # 인덱스 꼬임 방지
     
     # 차트 렌더링용 채우기 (ffill) 적용된 데이터
     df_merged = df_raw.ffill().bfill().fillna(0)
@@ -203,10 +218,11 @@ def load_data():
     return df_merged, df_raw
 
 with st.spinner('데이터를 수집하고 정밀 분석 중입니다...'):
-    df, df_raw = load_data()
+    df, df_raw = fetch_dashboard_data()
 
-if df.empty or len(df) < 6:
-    st.error("🚨 데이터를 가져오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
+# 데이터 수집 완전 실패에 대한 방어 로직 (열 개수 확인)
+if df.empty or len(df.columns) < 5:
+    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
     st.stop()
 
 # --- 다크 모드용 형광색 테마 설정 ---
@@ -376,9 +392,10 @@ def format_chg_text(cur, prev, unit, is_inverted, is_sofr=False):
     
     val_str = f"{abs(diff):.3f}%p" if is_sofr else f"{abs(diff):.2f}%p" if unit == '%' else f"{abs(diff):.2f}pt" if unit == 'pt' else f"{abs(diff):,.0f}억 달러"
     dir_text = "상승" if (diff > 0 and unit in ['pt', '%']) else "증가" if diff > 0 else "하락" if unit in ['pt', '%'] else "감소"
-    if abs(diff) < 0.001: return f"<span style='color: {color}; font-weight: bold;'>변동 없음</span>".replace('\n', ''), color
-
-    return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>".replace('\n', ''), color
+    
+    if abs(diff) < 0.001: 
+        return f"<span style='color: {color}; font-weight: bold;'>변동 없음</span>", color
+    return f"<span style='color: {color}; font-weight: bold;'>{arrow} {val_str} {dir_text}</span>", color
 
 # --- 안전한 데이터 추출 헬퍼 (결측치 원천 차단) ---
 def get_last_two(series, scale=1.0):
@@ -406,26 +423,38 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (줄바꿈 모두 제거하여 에러 원천 차단)
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
     
     card_bg = "linear-gradient(145deg, rgba(249,115,22,0.2) 0%, rgba(249,115,22,0.05) 100%)" if is_highlight else "#1e293b"
-    border_css = "border: 1px solid rgba(249,115,22,0.4);" if is_highlight else ""
+    border_css = "border: 1px solid rgba(249,115,22,0.4);" if is_highlight else "border: 1px solid rgba(255,255,255,0.05);"
     title_color = "#ffffff" if is_highlight else "#cbd5e1"
     footer_color = "rgba(255,255,255,0.6)" if is_highlight else "#64748b"
 
-    card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
+    card_html = f"""
+    <div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;">
+        <div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;">
+            <div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div>
+            <div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div>
+        </div>
+        <div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div>
+        <div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div>
+    </div>
+    """
     if target_id:
         return f'<a href="#{target_id}" class="custom-link">{card_html}</a>'
     return card_html
 
 # --- 프리미엄 디테일 카드 렌더링 함수 ---
 def render_detailed_indicator(key, df, days):
-    if key not in df.columns: return
+    if key not in df.columns: 
+        st.caption(f"⚠️ {INDICATOR_META[key]['name']} 실시간 데이터를 불러오지 못했습니다. (서버 응답 지연)")
+        return
+        
     meta = INDICATOR_META[key]
-    
     sub_df = df[key].dropna().tail(days)
     if len(sub_df) < 2: return
     
@@ -448,21 +477,22 @@ def render_detailed_indicator(key, df, days):
             val_10y = df['10Y'].dropna().iloc[-1]
             val_2y = df['2Y'].dropna().iloc[-1]
             extra_info_html = f"""<div style="font-size: 0.85rem; background-color: rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);">
-<b style="color: {ACCENT_GOLD};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
-따라서 두 금리의 차이(10년물 - 2년물)는 <b style="color:{status_color}">{cur:.2f}%</b>가 됩니다.
-</div>""".replace('\n', '')
+            <b style="color: {ACCENT_GOLD};">💡 상세 분석:</b> 현재 미국 10년물 국채 금리는 <b>{val_10y:.2f}%</b>, 2년물 국채 금리는 <b>{val_2y:.2f}%</b>입니다.<br>
+            따라서 두 금리의 차이(10년물 - 2년물)는 <b style="color:{status_color}">{cur:.2f}%</b>가 됩니다.
+            </div>"""
         except: pass
     
     top_text_html = f"<div style='color: {ACCENT_GOLD}; font-size: 0.75rem; font-weight: 700; margin-bottom: 2px;'>{meta['top_text']}</div>" if 'top_text' in meta else ""
     
     # 앵커 링크 연결을 위한 ID 부여 및 스크롤 마진 설정
-    st.markdown(f"""<div id="{key}" style="margin-top: 1rem; scroll-margin-top: 80px;">
-{top_text_html}
-<div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
-<h3 style="margin: 0; padding: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{meta['name']}</h3>
-</div>
-<div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
-</div>""".replace('\n', ''), unsafe_allow_html=True)
+    header_html = f"""<div id="{key}" style="margin-top: 1rem; scroll-margin-top: 80px;">
+    {top_text_html}
+    <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
+    <h3 style="margin: 0; padding: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; color: #f8fafc;">{meta['name']}</h3>
+    </div>
+    <div style="color: rgba(255,255,255,0.5); font-size: 0.75rem; font-weight: 500; margin-bottom: 0.5rem;">{meta['meta']}</div>
+    </div>"""
+    st.markdown(header_html, unsafe_allow_html=True)
     
     # ---------------------------------------------------------
     # 차트 렌더링 및 Y축 동적 확대(Auto-Range) 설정
@@ -516,45 +546,48 @@ def render_detailed_indicator(key, df, days):
     
     level_cards_html = ""
     for lvl in meta['levels']:
-        level_cards_html += f"""<div style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 14px;">
-<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-<span style="font-size: 16px;">{lvl[3]}</span>
-<span style="font-weight: 800; font-size: 12px; color: #f8fafc;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
-</div>
-<div style="font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.5;">{lvl[4]}</div>
-</div>"""
+        level_cards_html += f"""
+        <div style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid {lvl[2]}; border-radius: 8px; padding: 14px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="font-size: 16px;">{lvl[3]}</span>
+                <span style="font-weight: 800; font-size: 12px; color: #f8fafc;">{lvl[0]} <span style="color:{lvl[2]}; opacity:0.9;">· {lvl[1]}</span></span>
+            </div>
+            <div style="font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.5;">{lvl[4]}</div>
+        </div>"""
 
-    unified_card_html = f"""<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px; margin-top: 8px; margin-bottom: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 20px; gap: 16px;">
-<div style="flex: 1; min-width: 260px;">
-<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-<span style="background: {status_color}20; color: {status_color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; border: 1px solid {status_color}40;">{status_label}</span>
-<span style="font-size: 11.5px; color: rgba(255,255,255,0.5); font-weight: 600;">최근 {selected_period_label} 기준</span>
-</div>
-<div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px; color: #f8fafc;">{format_val(cur, meta['unit'], is_sofr)}</div>
-<div style="font-size: 0.95rem; color: rgba(255,255,255,0.8); font-weight: 600;"><b style="color: {ACCENT_GOLD};">{meta['short_name']}</b> — {status_text}</div>
-</div>
-<div style="display: flex; gap: 24px; background: rgba(255,255,255,0.02); padding: 14px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
-<div>
-<div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">1주 전 대비</div>
-<div style="font-size: 1rem;">{chg_1w_html}</div>
-</div>
-<div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
-<div>
-<div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">3개월 전 대비</div>
-<div style="font-size: 1rem;">{chg_3m_html}</div>
-</div>
-</div>
-</div>
-{extra_info_html}
-<div>
-<div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; color: {ACCENT_GOLD};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
-<div style="font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; line-height: 1.6;">{meta['desc']}</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
-{level_cards_html}
-</div>
-</div>
-</div>""".replace('\n', '')
+    unified_card_html = f"""
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px; margin-top: 8px; margin-bottom: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px; margin-bottom: 20px; gap: 16px;">
+            <div style="flex: 1; min-width: 260px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span style="background: {status_color}20; color: {status_color}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; border: 1px solid {status_color}40;">{status_label}</span>
+                    <span style="font-size: 11.5px; color: rgba(255,255,255,0.5); font-weight: 600;">최근 {selected_period_label} 기준</span>
+                </div>
+                <div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px; color: #f8fafc;">{format_val(cur, meta['unit'], is_sofr)}</div>
+                <div style="font-size: 0.95rem; color: rgba(255,255,255,0.8); font-weight: 600;"><b style="color: {ACCENT_GOLD};">{meta['short_name']}</b> — {status_text}</div>
+            </div>
+            <div style="display: flex; gap: 24px; background: rgba(255,255,255,0.02); padding: 14px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+                <div>
+                    <div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">1주 전 대비</div>
+                    <div style="font-size: 1rem;">{chg_1w_html}</div>
+                </div>
+                <div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
+                <div>
+                    <div style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-bottom: 4px;">3개월 전 대비</div>
+                    <div style="font-size: 1rem;">{chg_3m_html}</div>
+                </div>
+            </div>
+        </div>
+        {extra_info_html}
+        <div>
+            <div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 8px; color: {ACCENT_GOLD};"><span style="margin-right: 6px;">📌</span>{meta['short_name']}란?</div>
+            <div style="font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-bottom: 16px; line-height: 1.6;">{meta['desc']}</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+                {level_cards_html}
+            </div>
+        </div>
+    </div>
+    """
     st.markdown(unified_card_html, unsafe_allow_html=True)
 
 
@@ -621,7 +654,7 @@ if all(col in df.columns for col in ['EURUSD', 'USDJPY', 'USDCNY', 'GBPUSD']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">1 파운드당 달러</div>
         </div>
     </div>
-    """.replace('\n', '')
+    """
     st.markdown(global_assets_html, unsafe_allow_html=True)
 
 # --- 한국 경제 지표 섹션 ---
@@ -670,7 +703,7 @@ if all(col in df.columns for col in ['KOSPI', 'KOSDAQ', 'USDKRW']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">KRW/USD</div>
         </div>
     </div>
-    """.replace('\n', '')
+    """
     st.markdown(korean_assets_html, unsafe_allow_html=True)
 
 
@@ -733,7 +766,7 @@ if all(col in df.columns for col in ['SP500', 'NASDAQ', 'ES_F', 'NQ_F']):
             <div style="color: rgba(255,255,255,0.4); font-size: 0.8rem;">NQ=F · 실시간 야간 지표</div>
         </div>
     </div>
-    """.replace('\n', '')
+    """
     st.markdown(us_assets_html, unsafe_allow_html=True)
 
 
@@ -782,7 +815,6 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
-    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
@@ -797,56 +829,60 @@ if all(c in df_raw.columns for c in req_cols):
     v_sofr_effr = get_last_two(df_raw['SOFR_EFFR_Spread'])
     v_emerg = get_last_two(df_raw['Emergency_Loans'], 1/10) # Billion 단위 변환
 
-    board_html = ''.join([
-        '<div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">',
+    board_html = f"""
+    <div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
         
-        # --- Group 1: 시장 동향 및 매크로 (Merged & 2-Row Split) ---
-        '<div style="margin-bottom: 2rem;">',
-        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
-        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>',
-        '</div>',
-        # First row of 4 cards
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">',
-        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "", is_highlight=True),
-        render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX"),
-        render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y"),
-        render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread"),
-        '</div>',
-        # Second row of 3 cards
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
-        render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY"),
-        render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y"),
-        render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", ""),
-        '</div></div>',
+        <!-- Group 1: 시장 동향 및 매크로 (Merged & 2-Row Split) -->
+        <div style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                {render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "", is_highlight=True)}
+                {render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX")}
+                {render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y")}
+                {render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread")}
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                {render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY")}
+                {render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y")}
+                {render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", "")}
+            </div>
+        </div>
 
-        # --- Group 2: 유동성을 좌우하는 핵심 창구 ---
-        '<div style="margin-bottom: 2rem;">',
-        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
-        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🏦</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">유동성을 좌우하는 핵심 창구</div>',
-        '</div>',
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
-        render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Fed_BS"),
-        render_mini_card("지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Reserves"),
-        render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "TGA"),
-        '</div></div>',
+        <!-- Group 2: 유동성을 좌우하는 핵심 창구 -->
+        <div style="margin-bottom: 2rem;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🏦</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">유동성을 좌우하는 핵심 창구</div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Fed_BS")}
+                {render_mini_card("지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Reserves")}
+                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "TGA")}
+            </div>
+        </div>
 
-        # --- Group 3: 은행 신용 및 단기 자금 시장 ---
-        '<div>',
-        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
-        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(16,185,129,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💰</div>',
-        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">은행 신용 및 단기 자금 시장</div>',
-        '</div>',
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
-        render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "클릭하여 상세 차트 보기", "#10b981", "RRP"),
-        render_mini_card("MMF 잔액", f"{v_mmf[-1]:.2f}T", make_diff_str(v_mmf[-1], v_mmf[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "MMF"),
-        render_mini_card("상업은행 총대출", f"{v_totll[-1]:.2f}T", make_diff_str(v_totll[-1], v_totll[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "TOTLL"),
-        render_mini_card("조달 스프레드 (SOFR-IORB)", f"{v_sofr_iorb[-1]:.3f}%", make_diff_str(v_sofr_iorb[-1], v_sofr_iorb[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_IORB_Spread"),
-        render_mini_card("SOFR / EFFR 스프레드", f"{v_sofr_effr[-1]:.3f}%", make_diff_str(v_sofr_effr[-1], v_sofr_effr[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_EFFR_Spread"),
-        render_mini_card("긴급대출 잔액", f"${v_emerg[-1]:.1f}B", make_diff_str(v_emerg[-1], v_emerg[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "Emergency_Loans"),
-        '</div></div></div>'
-    ])
+        <!-- Group 3: 은행 신용 및 단기 자금 시장 -->
+        <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(16,185,129,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💰</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">은행 신용 및 단기 자금 시장</div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                {render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "클릭하여 상세 차트 보기", "#10b981", "RRP")}
+                {render_mini_card("MMF 잔액", f"{v_mmf[-1]:.2f}T", make_diff_str(v_mmf[-1], v_mmf[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "MMF")}
+                {render_mini_card("상업은행 총대출", f"{v_totll[-1]:.2f}T", make_diff_str(v_totll[-1], v_totll[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "TOTLL")}
+                {render_mini_card("조달 스프레드 (SOFR-IORB)", f"{v_sofr_iorb[-1]:.3f}%", make_diff_str(v_sofr_iorb[-1], v_sofr_iorb[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_IORB_Spread")}
+                {render_mini_card("SOFR / EFFR 스프레드", f"{v_sofr_effr[-1]:.3f}%", make_diff_str(v_sofr_effr[-1], v_sofr_effr[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_EFFR_Spread")}
+                {render_mini_card("긴급대출 잔액", f"${v_emerg[-1]:.1f}B", make_diff_str(v_emerg[-1], v_emerg[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "Emergency_Loans")}
+            </div>
+        </div>
+    </div>
+    """
     st.markdown(board_html, unsafe_allow_html=True)
 
 
@@ -874,7 +910,7 @@ if 'Net_Liquidity' in df.columns and 'SP500' in df.columns:
 중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
 통상적으로 <b style="color:#60a5fa">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#f87171">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
 </div>
-</div>""".replace('\n', ''), unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
 
 # --- 미국 10년물 국채금리 분해 (Decomposition) ---
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -904,6 +940,8 @@ if all(col in df.columns for col in ['10Y', 'T10YIE', 'ACMTP10']):
     fig_decomp.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickformat="%y.%m.%d", tickfont=dict(color='rgba(255,255,255,0.5)'))
     
     st.plotly_chart(fig_decomp, use_container_width=True, config={'displayModeBar': False})
+else:
+    st.info("💡 현재 연준(FRED) 서버에서 '기간 프리미엄(ACMTP10)' 등의 데이터를 일시적으로 제공하지 않아 차트를 생략합니다. (API 연동 지연)")
 
 
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -978,32 +1016,35 @@ def generate_report_html(df, days):
         strategy = f"거시 지표 방향성이 혼재되어 있습니다. <b>관망세 유지 및 대출 의존도가 낮은 우량(Quality) 기업 위주의 선별적 접근</b>이 필요합니다."
         s_color = COLOR_WARN
 
-    return f"""<div style="background: linear-gradient(145deg, rgba(212,175,55,0.06) 0%, rgba(212,175,55,0.02) 100%); border: 1px solid rgba(212,175,55,0.3); border-radius: 16px; padding: 26px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
-<div style="font-size: 1.05rem; font-weight: 800; color: #D4AF37; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-<span style="font-size: 1.2rem;">💡</span> 핵심 자산 배분 전략
-</div>
-<div style="font-size: 1rem; font-weight: 500; line-height: 1.6; margin-bottom: 24px; color: {s_color}; background: rgba(0,0,0,0.2); padding: 14px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
-{strategy}
-</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
-<div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-<div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 시장 심리 및 유동성</div>
-<div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
-<div>• {vix_msg}</div>
-<div>• {sys_msg}</div>
-</div>
-</div>
-<div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-<div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 매크로 및 신용 환경</div>
-<div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
-<div>• {sofr_msg}</div>
-<div>• {totll_msg}</div>
-<div>• {yield_msg}</div>
-<div>• {bei_msg}</div>
-</div>
-</div>
-</div>
-</div>""".replace('\n', '')
+    html_report = f"""
+    <div style="background: linear-gradient(145deg, rgba(212,175,55,0.06) 0%, rgba(212,175,55,0.02) 100%); border: 1px solid rgba(212,175,55,0.3); border-radius: 16px; padding: 26px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+        <div style="font-size: 1.05rem; font-weight: 800; color: #D4AF37; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.2rem;">💡</span> 핵심 자산 배분 전략
+        </div>
+        <div style="font-size: 1rem; font-weight: 500; line-height: 1.6; margin-bottom: 24px; color: {s_color}; background: rgba(0,0,0,0.2); padding: 14px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+            {strategy}
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 시장 심리 및 유동성</div>
+                <div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+                    <div>• {vix_msg}</div>
+                    <div>• {sys_msg}</div>
+                </div>
+            </div>
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 6px;">📌 매크로 및 신용 환경</div>
+                <div style="line-height: 1.8; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+                    <div>• {sofr_msg}</div>
+                    <div>• {totll_msg}</div>
+                    <div>• {yield_msg}</div>
+                    <div>• {bei_msg}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    return html_report
 
 st.markdown(generate_report_html(df, selected_days), unsafe_allow_html=True)
 st.caption(f"마지막 데이터 갱신: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (기준일자: {df.index[-1].strftime('%Y-%m-%d')})")
