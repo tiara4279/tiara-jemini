@@ -10,10 +10,11 @@ import numpy as np
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
 
-# --- 커스텀 CSS 및 메타 태그 (오류 수정: 빈 줄 완벽 제거) ---
+# --- 커스텀 CSS 및 메타 태그 (오류 수정: 빈 줄 완벽 제거 + 75% 화면 비율 적용) ---
 st.markdown("""<style>
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css");
 html, body, [class*="css"], [class*="st-"] {font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif !important;}
+[data-testid="block-container"] {max-width: 75% !important;}
 div[data-testid="stVerticalBlock"] > div {padding-bottom: 0.2rem;}
 hr {margin-top: 4rem; margin-bottom: 4rem; border: 0; height: 1px; background: linear-gradient(to right, rgba(128,128,128,0), rgba(128,128,128,0.2), rgba(128,128,128,0));}
 ::-webkit-scrollbar {width: 8px; height: 8px;}
@@ -281,7 +282,7 @@ def hex_to_rgba(hex_color, alpha=0.15):
     r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     return f'rgba({r},{g},{b},{alpha})'
 
-# --- 프리미엄 디테일 카드 렌더링 함수 (오류 수정: 빈 줄 완벽 제거) ---
+# --- 프리미엄 디테일 카드 렌더링 함수 ---
 def render_detailed_indicator(key, df, days):
     if key not in df.columns: return
     meta = INDICATOR_META[key]
