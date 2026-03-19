@@ -116,12 +116,14 @@ def load_data():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
+    # ACMTP10 (10년물 기간 프리미엄) 지표 추가
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
         'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
         'MMF': 'WRMFNS', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB', 'EFFR': 'EFFR',                  
-        'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB'           
+        'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB',
+        'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
     df_fred = pd.DataFrame()
