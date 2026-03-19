@@ -6,6 +6,8 @@ import datetime
 import plotly.graph_objects as plotly_go
 from plotly.subplots import make_subplots
 import numpy as np
+import urllib.request
+import json
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
@@ -72,6 +74,23 @@ period_options = {"1주일": 5, "1개월": 21, "3개월": 63, "6개월": 126, "1
 selected_period_label = st.radio("기간", list(period_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
 selected_days = period_options[selected_period_label]
 st.write("")
+
+# --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
+@st.cache_data(ttl=3600*2)
+def fetch_real_fng():
+    try:
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Referer": "https://edition.cnn.com/"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return int(round(data['fear_and_greed']['score']))
+    except Exception:
+        return None
 
 # --- 데이터 로드 함수 (강건한 결측치 처리 적용) ---
 @st.cache_data(ttl=3600*12) 
@@ -672,9 +691,18 @@ if all(c in df_raw.columns for c in req_cols):
     v_10y2y = df_raw['10Y_2Y'].dropna().values[-2:]
     v_hy = df_raw['HY_Spread'].dropna().values[-2:]
     
-    fng_score = int(max(0, min(100, 100 - (v_vix[-1] - 10) * 3.33)))
-    if fng_score <= 25: fng_state, fng_col = "극단적 공포 · extreme fear", COLOR_DANGER
-    elif fng_score <= 45: fng_state, fng_col = "공포 · fear", COLOR_WARN
+    # 공포탐욕지수 (CNN 실제 데이터 호출, 실패시 VIX 역산 추정치로 Fallback)
+    real_fng = fetch_real_fng()
+    if real_fng is not None:
+        fng_score = real_fng
+        fng_desc = "CNN Fear & Greed"
+    else:
+        # 기존 10기준보다 더 정교한 VIX 기반 추정치 (VIX 12 기준)
+        fng_score = int(max(0, min(100, 100 - (v_vix[-1] - 12) * 4)))
+        fng_desc = "CNN Fear & Greed (Proxy)"
+        
+    if fng_score <= 24: fng_state, fng_col = "극단적 공포 · extreme fear", COLOR_DANGER
+    elif fng_score <= 44: fng_state, fng_col = "공포 · fear", COLOR_WARN
     elif fng_score <= 55: fng_state, fng_col = "중립 · neutral", COLOR_NEUTRAL
     elif fng_score <= 75: fng_state, fng_col = "탐욕 · greed", COLOR_SAFE
     else: fng_state, fng_col = "극단적 탐욕 · extreme greed", COLOR_SAFE
@@ -699,7 +727,7 @@ if all(c in df_raw.columns for c in req_cols):
         '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향</div>',
         '</div>',
         '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
-        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, "CNN Fear & Greed (Proxy)", "#f97316"),
+        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316"),
         render_mini_card("VIX 변동성", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316"),
         render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316"),
         render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316"),
