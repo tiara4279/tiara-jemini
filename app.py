@@ -405,10 +405,16 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     return f"{arrow} {val_str} {period}", color
 
 # SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (줄바꿈 모두 제거하여 에러 원천 차단)
-def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id=""):
+def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
-    card_html = f'<div class="hover-card" style="background: #1e293b; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: #cbd5e1; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: #64748b; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
+    
+    card_bg = "linear-gradient(145deg, rgba(249,115,22,0.2) 0%, rgba(249,115,22,0.05) 100%)" if is_highlight else "#1e293b"
+    border_css = "border: 1px solid rgba(249,115,22,0.4);" if is_highlight else ""
+    title_color = "#ffffff" if is_highlight else "#cbd5e1"
+    footer_color = "rgba(255,255,255,0.6)" if is_highlight else "#64748b"
+
+    card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
     if target_id:
         return f'<a href="#{target_id}" class="custom-link">{card_html}</a>'
     return card_html
@@ -774,6 +780,7 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
+    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
@@ -791,17 +798,21 @@ if all(c in df_raw.columns for c in req_cols):
     board_html = ''.join([
         '<div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">',
         
-        # --- Group 1: 시장 동향 및 매크로 (Merged) ---
+        # --- Group 1: 시장 동향 및 매크로 (Merged & 2-Row Split) ---
         '<div style="margin-bottom: 2rem;">',
         '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
         '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>',
         '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>',
         '</div>',
-        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
-        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", ""),
+        # First row of 4 cards
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">',
+        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "", is_highlight=True),
         render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX"),
         render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y"),
         render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread"),
+        '</div>',
+        # Second row of 3 cards
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
         render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY"),
         render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y"),
         render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", ""),
