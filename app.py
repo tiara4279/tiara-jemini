@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import pandas_datareader.data as web
 import datetime
 import plotly.graph_objects as plotly_go
 from plotly.subplots import make_subplots
@@ -112,7 +111,7 @@ def fetch_real_fng():
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (강건한 결측치 처리 및 타임존 충돌 완벽 해결) ---
+# --- 데이터 로드 함수 (pandas_datareader 오류 원천 차단 - 직접 다운로드 방식으로 변경) ---
 @st.cache_data(ttl=3600*6) 
 def fetch_dashboard_data():
     end = datetime.datetime.today()
@@ -127,13 +126,18 @@ def fetch_dashboard_data():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # FRED 데이터 안전하게 병합
+    # FRED 데이터 직접 다운로드 (에러 없는 안전한 방식)
     fred_list = []
     for name, series_id in fred_series.items():
         try:
-            data = web.DataReader(series_id, 'fred', start, end)
-            data = data.rename(columns={series_id: name})
-            fred_list.append(data)
+            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
+                data = data[(data.index >= start) & (data.index <= end)]
+                data = data.rename(columns={series_id: name})
+                if not data.empty:
+                    fred_list.append(data)
         except Exception:
             pass 
             
@@ -169,7 +173,7 @@ def fetch_dashboard_data():
             '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
         })
         
-        # 타임존 충돌 방지: Yahoo 데이터의 타임존을 강제로 제거하여 FRED와 날짜를 완벽하게 일치시킴
+        # 타임존 충돌 방지: Yahoo 데이터의 타임존 강제 제거
         if not df_yf.empty and hasattr(df_yf.index, 'tz') and df_yf.index.tz is not None:
             df_yf.index = df_yf.index.tz_localize(None)
     except Exception:
@@ -177,7 +181,7 @@ def fetch_dashboard_data():
 
     # 원본 데이터 보존 (타임존 맞춘 후 병합)
     df_raw = pd.concat([df_fred, df_yf], axis=1)
-    df_raw = df_raw.sort_index() # 인덱스 꼬임 방지
+    df_raw = df_raw.sort_index()
     
     # 차트 렌더링용 채우기 (ffill) 적용된 데이터
     df_merged = df_raw.ffill().bfill().fillna(0)
@@ -228,7 +232,7 @@ if df.empty or len(df.columns) < 5:
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
 COLOR_WARN = "#facc15"   # 주의 (골드 옐로우)
 COLOR_DANGER = "#f87171" # 경계/위험 (라이트 레드/핑크)
-COLOR_NEUTRAL = "#fef08a" # 중립을 연노랑으로 변경
+COLOR_NEUTRAL = "#fef08a" # 중립 연노랑
 ACCENT_GOLD = "#D4AF37"  # 강조 골드 (스튜디오 톤)
 ACCENT_KOREA = "#10b981" # 짙은 에메랄드 그린 (한국 자산)
 ACCENT_US = "#3b82f6"    # 시원한 블루 (미국 자산)
@@ -422,15 +426,15 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (연노랑 텍스트 적용)
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (연노랑 텍스트 및 줄바꿈 완전 제거)
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
     
     card_bg = "linear-gradient(145deg, rgba(249,115,22,0.2) 0%, rgba(249,115,22,0.05) 100%)" if is_highlight else "#1e293b"
     border_css = "border: 1px solid rgba(249,115,22,0.4);" if is_highlight else "border: 1px solid rgba(255,255,255,0.05);"
-    title_color = "#ffffff" if is_highlight else "#fef08a" # 연노랑 포인트
-    footer_color = "rgba(255,255,255,0.8)" if is_highlight else "#fef08a" # 연노랑 (투명도 조절)
+    title_color = "#ffffff" if is_highlight else "#fef08a" 
+    footer_color = "rgba(255,255,255,0.8)" if is_highlight else "#fef08a" 
     footer_opacity = "1.0" if is_highlight else "0.7"
 
     card_html = f'<div class="hover-card" style="background: {card_bg}; {border_css} border-radius: 12px; padding: 20px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.2); height: 100%;"><div style="position: absolute; top: 0; left: 0; bottom: 0; width: 4px; background: {accent_color};"></div><div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; padding-left: 8px;"><div style="color: {title_color}; font-size: 0.9rem; font-weight: 700; letter-spacing: -0.3px;">{title}</div><div style="background: {bg_color}; color: {diff_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">{diff_text}</div></div><div style="color: #ffffff; font-size: 1.7rem; font-weight: 800; padding-left: 8px; line-height: 1.2; margin-bottom: 8px;">{val_str}</div><div style="color: {footer_color}; opacity: {footer_opacity}; font-size: 0.75rem; padding-left: 8px; font-weight: 500;">{footer}</div></div>'
@@ -806,7 +810,6 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
-    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
@@ -821,60 +824,56 @@ if all(c in df_raw.columns for c in req_cols):
     v_sofr_effr = get_last_two(df_raw['SOFR_EFFR_Spread'])
     v_emerg = get_last_two(df_raw['Emergency_Loans'], 1/10) # Billion 단위 변환
 
-    board_html = f"""
-    <div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+    board_html = ''.join([
+        '<div style="margin-bottom: 3rem; background: rgba(255,255,255,0.01); padding: 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">',
         
-        <!-- Group 1: 시장 동향 및 매크로 (Merged & 2-Row Split) -->
-        <div style="margin-bottom: 2rem;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
-                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
-                {render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "", is_highlight=True)}
-                {render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX")}
-                {render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y")}
-                {render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread")}
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                {render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY")}
-                {render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y")}
-                {render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", "")}
-            </div>
-        </div>
+        # --- Group 1: 시장 동향 및 매크로 (Merged & 2-Row Split) ---
+        '<div style="margin-bottom: 2rem;">',
+        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
+        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(249,115,22,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">📈</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">시장 동향 및 매크로</div>',
+        '</div>',
+        # First row of 4 cards
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">',
+        render_mini_card("공포탐욕지수", f"{fng_score}", fng_diff_data, fng_desc, "#f97316", "", is_highlight=True),
+        render_mini_card("VIX 변동성 지수", f"{v_vix[-1]:.2f}", make_diff_str(v_vix[-1], v_vix[-2], invert=True), "20↓ 안정 · 30↑ 경계", "#f97316", "VIX"),
+        render_mini_card("장단기 금리차", f"{v_10y2y[-1]:.2f}%", make_diff_str(v_10y2y[-1], v_10y2y[-2], unit='%'), "10Y - 2Y · 음수 = 역전", "#f97316", "10Y_2Y"),
+        render_mini_card("하이일드 스프레드", f"{v_hy[-1]:.2f}%", make_diff_str(v_hy[-1], v_hy[-2], unit='%', invert=True), "신용시장 스트레스", "#f97316", "HY_Spread"),
+        '</div>',
+        # Second row of 3 cards
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
+        render_mini_card("달러인덱스", f"{v_dxy[-1]:.2f}", make_diff_str(v_dxy[-1], v_dxy[-2], invert=True), "DXY · ICE 달러인덱스", "#a855f7", "DXY"),
+        render_mini_card("10년물 금리", f"{v_10y[-1]:.2f}%", make_diff_str(v_10y[-1], v_10y[-2], unit='%', invert=True), "미국 장기금리 기준", "#a855f7", "10Y_2Y"),
+        render_mini_card("WTI 원유", f"${v_wti[-1]:.1f}", make_diff_str(v_wti[-1], v_wti[-2], invert=True), "USD/배럴", "#a855f7", ""),
+        '</div></div>',
 
-        <!-- Group 2: 유동성을 좌우하는 핵심 창구 -->
-        <div style="margin-bottom: 2rem;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
-                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🏦</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">유동성을 좌우하는 핵심 창구</div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-                {render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Fed_BS")}
-                {render_mini_card("지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Reserves")}
-                {render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "TGA")}
-            </div>
-        </div>
+        # --- Group 2: 유동성을 좌우하는 핵심 창구 ---
+        '<div style="margin-bottom: 2rem;">',
+        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
+        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">🏦</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">유동성을 좌우하는 핵심 창구</div>',
+        '</div>',
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">',
+        render_mini_card("연준 총자산", f"{v_fed[-1]:.2f}T", make_diff_str(v_fed[-1], v_fed[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Fed_BS"),
+        render_mini_card("지급준비금", f"{v_res[-1]:.2f}T", make_diff_str(v_res[-1], v_res[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "Reserves"),
+        render_mini_card("TGA 잔액", f"{v_tga[-1]:.1f}B", make_diff_str(v_tga[-1], v_tga[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#3b82f6", "TGA"),
+        '</div></div>',
 
-        <!-- Group 3: 은행 신용 및 단기 자금 시장 -->
-        <div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
-                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(16,185,129,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💰</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">은행 신용 및 단기 자금 시장</div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                {render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "클릭하여 상세 차트 보기", "#10b981", "RRP")}
-                {render_mini_card("MMF 잔액", f"{v_mmf[-1]:.2f}T", make_diff_str(v_mmf[-1], v_mmf[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "MMF")}
-                {render_mini_card("상업은행 총대출", f"{v_totll[-1]:.2f}T", make_diff_str(v_totll[-1], v_totll[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "TOTLL")}
-                {render_mini_card("조달 스프레드 (SOFR-IORB)", f"{v_sofr_iorb[-1]:.3f}%", make_diff_str(v_sofr_iorb[-1], v_sofr_iorb[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_IORB_Spread")}
-                {render_mini_card("SOFR / EFFR 스프레드", f"{v_sofr_effr[-1]:.3f}%", make_diff_str(v_sofr_effr[-1], v_sofr_effr[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_EFFR_Spread")}
-                {render_mini_card("긴급대출 잔액", f"${v_emerg[-1]:.1f}B", make_diff_str(v_emerg[-1], v_emerg[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "Emergency_Loans")}
-            </div>
-        </div>
-    </div>
-    """.replace('\n', '')
+        # --- Group 3: 은행 신용 및 단기 자금 시장 ---
+        '<div>',
+        '<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">',
+        '<div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(16,185,129,0.15); display: flex; justify-content: center; align-items: center; font-size: 1.1rem;">💰</div>',
+        '<div style="font-size: 1.15rem; font-weight: 800; color: #e2e8f0; letter-spacing: -0.5px;">은행 신용 및 단기 자금 시장</div>',
+        '</div>',
+        '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">',
+        render_mini_card("역레포(RRP) 잔액", f"{v_rrp[-1]:.2f}B", make_diff_str(v_rrp[-1], v_rrp[-2], unit='B', invert=True), "클릭하여 상세 차트 보기", "#10b981", "RRP"),
+        render_mini_card("MMF 잔액", f"{v_mmf[-1]:.2f}T", make_diff_str(v_mmf[-1], v_mmf[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "MMF"),
+        render_mini_card("상업은행 총대출", f"{v_totll[-1]:.2f}T", make_diff_str(v_totll[-1], v_totll[-2], unit='T', period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "TOTLL"),
+        render_mini_card("조달 스프레드 (SOFR-IORB)", f"{v_sofr_iorb[-1]:.3f}%", make_diff_str(v_sofr_iorb[-1], v_sofr_iorb[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_IORB_Spread"),
+        render_mini_card("SOFR / EFFR 스프레드", f"{v_sofr_effr[-1]:.3f}%", make_diff_str(v_sofr_effr[-1], v_sofr_effr[-2], unit='%', invert=True), "클릭하여 상세 차트 보기", "#10b981", "SOFR_EFFR_Spread"),
+        render_mini_card("긴급대출 잔액", f"${v_emerg[-1]:.1f}B", make_diff_str(v_emerg[-1], v_emerg[-2], unit='B', invert=True, period='전주 대비'), "클릭하여 상세 차트 보기", "#10b981", "Emergency_Loans"),
+        '</div></div></div>'
+    ])
     st.markdown(board_html, unsafe_allow_html=True)
 
 
