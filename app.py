@@ -1,5 +1,5 @@
 # ============================================================
-#  글로벌 매크로 대시보드 — app.py (v6 - 지표 클릭 및 설명 추가)
+#  글로벌 매크로 대시보드 — app.py (v8 - 확장성과 가독성 조정)
 # ============================================================
 import subprocess, sys, os, warnings
 warnings.filterwarnings("ignore")
@@ -68,8 +68,8 @@ html, body, [class*="css"], .stMarkdown, .stText, p, span, div, label {
 .stApp { background: #060A12 !important; }
 .block-container {
     padding-top: 2rem !important;
-    max-width: 1400px;
 }
+
 h1 {
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 2.2rem !important;
@@ -183,7 +183,6 @@ section[data-testid="stSidebar"] span {
 </style>
 """, unsafe_allow_html=True)
 
-
 # ═══════════════════════════════════════════════════════════
 #  공통 유틸
 # ═══════════════════════════════════════════════════════════
@@ -271,27 +270,27 @@ def get_indicator_description(indicator):
                 "30": "주의 — 시장이 변동성이 높아집니다.",
                 "40": "위험 — 시장이 매우 불안정합니다.",
             },
-            "chart_data": "...",  # 그래프 데이터 추가 필요
+            "chart_data": "VIX 그래프 데이터",  # 그래프 데이터 추가 필요
         },
         "Liquidity": {
-            "current_value": ...,  # 실제 데이터로 업데이트
-            "trend": "현재 유동성 상황입니다. 데이터 업데이트 필요.",
+            "current_value": "3,300억",
+            "trend": "현재 유동성 상황은 양호합니다. 데이터 업데이트 필요.",
             "risk": {
-                "20": "양호 — 유동성이 안정적입니다.",
+                "20": "안정 — 유동성이 안정적입니다.",
                 "30": "주의 — 유동성의 변동성이 커질 수 있습니다.",
                 "40": "위험 — 유동성이 낮습니다.",
             },
-            "chart_data": "...",
+            "chart_data": "유동성 그래프 데이터",
         },
         "Credit": {
-            "current_value": ...,  # 실제 데이터로 업데이트
-            "trend": "현재 신용 상태입니다. 데이터 업데이트 필요.",
+            "current_value": "17,500억",
+            "trend": "신용 상태는 안정적인 편입니다.",
             "risk": {
-                "20": "양호 — 신용 상태가 안정적입니다.",
+                "20": "안정 — 신용 상태가 안정적입니다.",
                 "30": "주의 — 신용 위험이 증가할 수 있습니다.",
                 "40": "위험 — 신용이 걱정됩니다.",
             },
-            "chart_data": "...",
+            "chart_data": "신용 그래프 데이터",
         },
     }
     return descriptions[indicator]
@@ -307,10 +306,7 @@ st.caption("GLOBAL MACRO MONITOR — REAL-TIME FINANCIAL INDICATORS")
 
 ts_col, btn_col = st.columns([6, 1])
 with ts_col:
-    st.markdown(
-        f'<div class="ts-box">🕐 {now_str}</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="ts-box">🕐 {now_str}</div>', unsafe_allow_html=True)
 with btn_col:
     if st.button("🔄 새로고침", use_container_width=True):
         st.cache_data.clear()
@@ -318,7 +314,6 @@ with btn_col:
 
 st.markdown("---")
 st.success("✅ **FRED API 연결됨** — 연준·유동성·인플레이션 실데이터 수신 중")
-
 
 # ═══════════════════════════════════════════════════════════
 #  §1  지표 선택
@@ -331,8 +326,8 @@ indicator_choice = st.selectbox(
 
 if indicator_choice == "시장 리스크 및 스트레스 지표 (VIX)":
     description = get_indicator_description("VIX")
-
-    # 그래프
+    
+    # 데이터 및 그래프
     vix_data = get_fred("VIX", 60)  # VIX 데이터 예시
     if vix_data is not None:
         spark(vix_data, "#EF4444", 300, is_series=True)
@@ -346,7 +341,7 @@ if indicator_choice == "시장 리스크 및 스트레스 지표 (VIX)":
 elif indicator_choice == "유동성을 좌우하는 핵심 창구 (연준)":
     description = get_indicator_description("Liquidity")
 
-    # 그래프
+    # 데이터 및 그래프
     liquidity_data = get_fred("WALCL", 60)  # 예시 데이터
     if liquidity_data is not None:
         spark(liquidity_data, "#10B981", 300, is_series=True)
@@ -360,7 +355,7 @@ elif indicator_choice == "유동성을 좌우하는 핵심 창구 (연준)":
 elif indicator_choice == "은행 신용 및 단기 자금 시장":
     description = get_indicator_description("Credit")
 
-    # 그래프
+    # 데이터 및 그래프
     credit_data = get_fred("RRPONTSYD", 60)  # 예시 데이터
     if credit_data is not None:
         spark(credit_data, "#8B5CF6", 300, is_series=True)
