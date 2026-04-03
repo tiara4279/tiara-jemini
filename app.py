@@ -871,7 +871,7 @@ if _data_ok:
 </body>
 </html>
 """
-            components.html(html_box, height=380, scrolling=False)
+            components.html(html_box, height=520, scrolling=False)
 
         else:
             st.warning("데이터 병합 포인트가 부족합니다. 잠시 후 다시 시도해 주세요.")
