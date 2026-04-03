@@ -620,127 +620,162 @@ with tab4:
     st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
 
 # ═══════════════════════════════════════════════════════════
-#  §9 Net Liquidity
+#  §9 Net Liquidity (완전 수정본 2.0 — 데이터 로딩 수정)
 # ═══════════════════════════════════════════════════════════
 sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
 st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
 
-try:
-    walcl = get_fred('WALCL', limit=300)
-    rrp = get_fred('RRPONTSYD', limit=300)
-    tga = get_fred('WTREGEN', limit=300)
-    _, _, sp500_df = get_yf('^GSPC', period='1y', interval='1d')
-    
-    if all([walcl is not None, rrp is not None, tga is not None, sp500_df is not None and len(sp500_df) > 10]):
-        try:
-            walcl_b = walcl / 1000.0
-            rrp_b = rrp / 1000.0
-            tga_b = tga / 1000.0
-            
-            df_liq = pd.DataFrame({
-                'WALCL': walcl_b,
-                'RRP': rrp_b,
-                'TGA': tga_b
-            })
-            df_liq['Net_Liquidity'] = df_liq['WALCL'] - df_liq['RRP'] - df_liq['TGA']
-            
-            sp500_s = sp500_df['Close'].copy()
-            if hasattr(sp500_s.index, 'tz') and sp500_s.index.tz is not None:
-                sp500_s.index = sp500_s.index.tz_localize(None)
-            
-            df_liq.index = pd.to_datetime(df_liq.index).normalize()
-            sp500_s.index = pd.to_datetime(sp500_s.index).normalize()
-            
-            df_plot = df_liq[['Net_Liquidity']].join(sp500_s.rename('Close'), how='inner').dropna()
-            
-            if len(df_plot) > 10:
-                fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
-                
-                fig_liq.add_trace(
-                    go.Scatter(x=df_plot.index, y=df_plot['Net_Liquidity'], name="순유동성 (T$)",
-                               line=dict(color='#00D4FF', width=2.5)),
-                    secondary_y=False
-                )
-                fig_liq.add_trace(
-                    go.Scatter(x=df_plot.index, y=df_plot['Close'], name="S&P 500",
-                               line=dict(color='#FF5555', width=1.5)),
-                    secondary_y=True
-                )
-                
-                fig_liq.update_layout(**CHART_LAYOUT, title_text="Net Liquidity vs S&P 500 (최근 1년)")
-                fig_liq.update_yaxes(title_text="순유동성 (T$)", secondary_y=False, color="#00D4FF")
-                fig_liq.update_yaxes(title_text="S&P 500", secondary_y=True, color="#FF5555")
-                
-                st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
-                
-                st.markdown("""<div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 16px; margin-bottom: 30px;">
-                <div style="font-size: 0.9rem; font-weight: 700; color:#00D4FF; margin-bottom: 8px;">📌 Net Liquidity 공식</div>
-                <div style="font-family:'IBM Plex Mono'; font-size: 0.85rem; color:#AACCEE; margin-bottom: 12px; background:#060A12; padding:10px; border-radius:6px;">
-                순유동성 = 연준 총자산(WALCL) - 역레포(RRPONTSYD) - TGA(WTREGEN)
-                </div></div>""", unsafe_allow_html=True)
-        except Exception as e:
-            st.warning(f"⚠️ 차트 생성 오류")
-    else:
-        st.warning("⚠️ 필요한 데이터를 불러오지 못했습니다.")
-except Exception as e:
-    st.error(f"유동성 섹션 오류")
+# ── 데이터 개별 로딩 (all() 조건 밖에서 명시적으로 체크)
+_walcl  = get_fred('WALCL',     limit=300)   # 단위: 백만달러 (M$)
+_rrp    = get_fred('RRPONTSYD', limit=300)   # 단위: 십억달러 (B$)
+_tga    = get_fred('WTREGEN',   limit=300)   # 단위: 백만달러 (M$)
 
+# S&P500 별도 호출 (캐시 키 충돌 방지)
 try:
-    dgs10 = get_fred('DGS10', limit=300)
-    t10yie = get_fred('T10YIE', limit=300)
-    dfedtru = get_fred('DFEDTRU', limit=300)
-    
-    if all([dgs10 is not None, t10yie is not None, dfedtru is not None]):
-        try:
-            df_dec = pd.DataFrame({
-                '10Y': dgs10,
-                'T10YIE': t10yie,
-                'DFEDTRU': dfedtru
-            }).ffill().dropna()
-            
-            df_dec['Term_Premium'] = df_dec['10Y'] - df_dec['DFEDTRU'] - df_dec['T10YIE']
-            
-            if len(df_dec) > 20:
-                fig_dec = make_subplots(specs=[[{"secondary_y": True}]])
-                
-                fig_dec.add_trace(
-                    go.Scatter(x=df_dec.index, y=df_dec['10Y'], name="10Y 금리",
-                               line=dict(color='#3B82F6', width=2.5)),
-                    secondary_y=False
-                )
-                fig_dec.add_trace(
-                    go.Scatter(x=df_dec.index, y=df_dec['DFEDTRU'], name="단기금리 (FFR)",
-                               line=dict(color='#06B6D4', width=1.5)),
-                    secondary_y=False
-                )
-                fig_dec.add_trace(
-                    go.Scatter(x=df_dec.index, y=df_dec['T10YIE'], name="기대인플레이션",
-                               line=dict(color='#8AAAC8', width=1.5)),
-                    secondary_y=False
-                )
-                fig_dec.add_trace(
-                    go.Scatter(x=df_dec.index, y=df_dec['Term_Premium'], name="기간 프리미엄",
-                               line=dict(color='#F59E0B', width=2.5)),
-                    secondary_y=True
-                )
-                
-                fig_dec.update_layout(**CHART_LAYOUT, title_text="10년물 국채금리 분해")
-                fig_dec.update_yaxes(title_text="금리 (%)", secondary_y=False, color="#AACCEE")
-                fig_dec.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, color="#F59E0B", showgrid=False)
-                
-                st.plotly_chart(fig_dec, use_container_width=True, config={'displayModeBar': False})
-                
-                st.markdown("""<div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 16px;">
-                <div style="font-size: 0.9rem; font-weight: 700; color:#00D4FF; margin-bottom: 8px;">📌 금리 분해 공식</div>
-                <div style="font-family:'IBM Plex Mono'; font-size: 0.8rem; color:#AACCEE; background:#060A12; padding:10px; border-radius:6px;">
-                10Y = 단기금리(FFR) + 기대인플레이션 + 기간 프리미엄
-                </div></div>""", unsafe_allow_html=True)
-        except Exception:
-            st.warning("⚠️ 차트 생성 오류")
-    else:
-        st.warning("⚠️ 필요한 데이터를 불러오지 못했습니다.")
+    _sp500_raw = yf.Ticker('^GSPC').history(period='1y', interval='1d', auto_adjust=True)
+    _sp500_ok  = not _sp500_raw.empty and len(_sp500_raw) > 10
 except Exception:
-    st.error("금리 분해 섹션 오류")
+    _sp500_raw = None
+    _sp500_ok  = False
+
+_data_ok = (
+    _walcl  is not None and len(_walcl)  > 1 and
+    _rrp    is not None and len(_rrp)    > 1 and
+    _tga    is not None and len(_tga)    > 1 and
+    _sp500_ok
+)
+
+if _data_ok:
+    try:
+        # ── 단위 통일 → 조 달러(T$)
+        # WALCL : M$ → T$  ( ÷ 1,000,000 )
+        # RRPONTSYD : B$ → T$  ( ÷ 1,000 )
+        # WTREGEN : M$ → T$  ( ÷ 1,000,000 )
+        walcl_t = _walcl  / 1_000_000.0
+        rrp_t   = _rrp    / 1_000.0
+        tga_t   = _tga    / 1_000_000.0
+
+        df_liq = pd.DataFrame({
+            'WALCL': walcl_t,
+            'RRP':   rrp_t,
+            'TGA':   tga_t,
+        })
+        df_liq['Net_Liquidity'] = df_liq['WALCL'] - df_liq['RRP'] - df_liq['TGA']
+
+        # ── S&P500 타임존 제거
+        sp500_s = _sp500_raw['Close'].copy()
+        if hasattr(sp500_s.index, 'tz') and sp500_s.index.tz is not None:
+            sp500_s.index = sp500_s.index.tz_localize(None)
+
+        # ── 날짜 정규화
+        df_liq.index  = pd.to_datetime(df_liq.index).normalize()
+        sp500_s.index = pd.to_datetime(sp500_s.index).normalize()
+
+        # ── FRED 주간 → 일간 S&P500 기준으로 reindex + ffill 병합
+        df_plot = (
+            df_liq[['Net_Liquidity', 'WALCL', 'RRP', 'TGA']]
+            .reindex(sp500_s.index, method='ffill')
+            .join(sp500_s.rename('Close'))
+            .dropna()
+        )
+
+        if len(df_plot) > 10:
+            # ── 최신값 추출
+            latest_walcl = df_plot['WALCL'].iloc[-1]
+            latest_rrp   = df_plot['RRP'].iloc[-1]
+            latest_tga   = df_plot['TGA'].iloc[-1]
+            latest_nl    = df_plot['Net_Liquidity'].iloc[-1]
+            latest_sp    = df_plot['Close'].iloc[-1]
+            latest_date  = df_plot.index[-1].strftime('%Y-%m-%d')
+
+            prev_nl      = df_plot['Net_Liquidity'].iloc[-6]
+            nl_chg       = latest_nl - prev_nl
+            nl_chg_arrow = "▲" if nl_chg >= 0 else "▼"
+            nl_chg_color = "#22D98A" if nl_chg >= 0 else "#FF5555"
+
+            # ── 차트
+            fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
+
+            fig_liq.add_trace(
+                go.Scatter(
+                    x=df_plot.index, y=df_plot['Net_Liquidity'],
+                    name="순유동성 (T$)",
+                    line=dict(color='#00D4FF', width=2.5),
+                    fill='tozeroy',
+                    fillcolor='rgba(0,212,255,0.06)'
+                ),
+                secondary_y=False
+            )
+            fig_liq.add_trace(
+                go.Scatter(
+                    x=df_plot.index, y=df_plot['Close'],
+                    name="S&P 500",
+                    line=dict(color='#FF5555', width=1.8)
+                ),
+                secondary_y=True
+            )
+
+            fig_liq.update_layout(
+                **CHART_LAYOUT,
+                title_text="Net Liquidity vs S&P 500 (최근 1년)"
+            )
+            fig_liq.update_yaxes(title_text="순유동성 (T$)", secondary_y=False, color="#00D4FF")
+            fig_liq.update_yaxes(title_text="S&P 500",       secondary_y=True,  color="#FF5555")
+
+            st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
+
+            # ── 실제 데이터 공식 박스
+            st.markdown(f"""
+<div style="background:#0C1420; border:1px solid #1E3050; border-radius:14px; padding:20px; margin-bottom:24px;">
+
+  <div style="font-size:0.95rem; font-weight:800; color:#00D4FF; margin-bottom:14px;">
+    📌 Net Liquidity 실시간 계산
+    &nbsp;<span style="font-size:0.75rem; color:#4A6888; font-weight:600;">기준일: {latest_date}</span>
+  </div>
+
+  <div style="font-family:'IBM Plex Mono',monospace; background:#060A12; border:1px solid #1A2A3F;
+              border-radius:10px; padding:16px; margin-bottom:16px; line-height:2.2;">
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="color:#3B82F6; font-size:1.0rem; font-weight:700;">연준 총자산</span>
+      <span style="color:#4A6888; font-size:0.8rem;">(WALCL)</span>
+      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+                   color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_walcl:.2f} T</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="color:#FF5555; font-size:1.2rem; font-weight:900;">−</span>
+      <span style="color:#EC4899; font-size:1.0rem; font-weight:700;">역레포 (RRP)</span>
+      <span style="color:#4A6888; font-size:0.8rem;">(RRPONTSYD)</span>
+      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+                   color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_rrp:.2f} T</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="color:#FF5555; font-size:1.2rem; font-weight:900;">−</span>
+      <span style="color:#F59E0B; font-size:1.0rem; font-weight:700;">재무부 계좌 (TGA)</span>
+      <span style="color:#4A6888; font-size:0.8rem;">(WTREGEN)</span>
+      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+                   color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_tga:.2f} T</span>
+    </div>
+
+    <div style="border-top:1px solid #1E3050; margin-top:10px; padding-top:10px;
+                display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="color:#22D98A; font-size:1.2rem; font-weight:900;">=</span>
+      <span style="color:#00D4FF; font-size:1.05rem; font-weight:800;">순유동성 (Net Liquidity)</span>
+      <span style="background:rgba(0,212,255,0.15); border:1px solid #00D4FF55;
+                   padding:5px 16px; border-radius:8px;
+                   color:#00D4FF; font-size:1.2rem; font-weight:900;">${latest_nl:.2f} T</span>
+      <span style="color:{nl_chg_color}; font-size:0.82rem; font-weight:700;">
+        {nl_chg_arrow} {abs(nl_chg):.3f} T (주간 변화)
+      </span>
+    </div>
+
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+    <div style="background:#080E1A; bord**
+
 
 # ═══════════════════════════════════════════════════════════
 #  사이드바 & 푸터
