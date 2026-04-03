@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import datetime
+import time
 import plotly.graph_objects as plotly_go
 from plotly.subplots import make_subplots
 import numpy as np
 import urllib.request
 import json
-import concurrent.futures
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
@@ -112,9 +112,9 @@ def fetch_real_fng():
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (초고속 병렬 다운로드 처리 적용 및 꼬인 캐시 강제 파기) ---
+# --- 데이터 로드 함수 (연준 서버 차단 방지용 안전 다운로드 로직 적용) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_dashboard_data_fast():
+def fetch_data_stable():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
@@ -127,28 +127,32 @@ def fetch_dashboard_data_fast():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 초고속 병렬 다운로드 (Multi-threading)
-    def download_fred(name, series_id):
-        try:
-            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as response:
-                data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
-                data = data[(data.index >= start) & (data.index <= end)]
-                data = data.rename(columns={series_id: name})
-                if not data.empty:
-                    return data
-        except Exception:
-            return pd.DataFrame()
-        return pd.DataFrame()
-
+    # [1] FRED 데이터 안전한 순차 다운로드 (HTTP 429 Too Many Requests 방어 로직)
     fred_list = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(download_fred, name, sid) for name, sid in fred_series.items()]
-        for future in concurrent.futures.as_completed(futures):
-            res = future.result()
-            if not res.empty:
-                fred_list.append(res)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    }
+
+    for name, series_id in fred_series.items():
+        success = False
+        for attempt in range(3): # 통신 실패시 최대 3회 재시도
+            try:
+                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=7) as response:
+                    data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
+                    data = data[(data.index >= start) & (data.index <= end)]
+                    data = data.rename(columns={series_id: name})
+                    if not data.empty:
+                        fred_list.append(data)
+                        success = True
+                        break # 성공시 재시도 루프 탈출
+            except Exception:
+                time.sleep(1) # 에러 발생시 1초 대기 후 재시도
+                
+        if success:
+            time.sleep(0.2) # 정상 수신 후 연준 서버 과부하 방지를 위해 0.2초 휴식
                 
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
@@ -228,8 +232,8 @@ def fetch_dashboard_data_fast():
     
     return df_merged, df_raw
 
-with st.spinner('데이터를 수집하고 정밀 분석 중입니다. 잠시만 기다려주세요 (최대 5초 소요)...'):
-    df, df_raw = fetch_dashboard_data_fast()
+with st.spinner('안전한 방식으로 데이터를 수집하고 있습니다. 잠시만 기다려주세요 (약 3~5초 소요)...'):
+    df, df_raw = fetch_data_stable()
 
 # 데이터 수집 완전 실패에 대한 방어 로직
 if df.empty or len(df.columns) < 5:
