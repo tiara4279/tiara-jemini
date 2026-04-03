@@ -5,10 +5,8 @@ import datetime
 import plotly.graph_objects as plotly_go
 from plotly.subplots import make_subplots
 import numpy as np
+import urllib.request
 import json
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from io import StringIO
 
 # --- 페이지 설정 ---
@@ -96,37 +94,29 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
-# --- HTTP 세션 및 재시도 설정 (FRED 서버 안정성 확보) ---
-@st.cache_resource
-def get_requests_session():
-    session = requests.Session()
-    # 429(Too Many Requests), 500, 502, 503, 504 에러 발생 시 자동으로 점진적 재시도
-    retry = Retry(connect=3, read=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-    return session
-
 # --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
 @st.cache_data(ttl=3600*2)
 def fetch_cnn_fng():
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-        session = get_requests_session()
-        response = session.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        return int(round(data['fear_and_greed']['score']))
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://edition.cnn.com/",
+            "Origin": "https://edition.cnn.com",
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return int(round(data['fear_and_greed']['score']))
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (Requests 라이브러리를 활용한 견고한 다운로드) ---
+# --- 데이터 로드 함수 (무한 로딩 원천 차단: 서킷 브레이커 & 빠른 실패 로직) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_data_robust():
+def fetch_data_breaker():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
-    session = get_requests_session()
     
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
@@ -137,21 +127,30 @@ def fetch_data_robust():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 안정적 순차 다운로드 (지수 백오프 세션 활용)
+    # [1] FRED 데이터 초고속 3초 타임아웃 다운로드 (서킷 브레이커 탑재)
     fred_list = []
+    fred_blocked = False # 연준 서버 차단 감지용 스위치
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"}
+
     for name, series_id in fred_series.items():
+        if fred_blocked:
+            break # 서버가 차단(429)했으면 나머지 지표는 묻지도 따지지도 않고 포기 (무한로딩 방지)
+            
         try:
             url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-            response = session.get(url, timeout=7)
-            response.raise_for_status()
-            
-            data = pd.read_csv(StringIO(response.text), index_col='DATE', parse_dates=True, na_values=['.', ''])
-            data = data[(data.index >= start) & (data.index <= end)]
-            data = data.rename(columns={series_id: name})
-            if not data.empty:
-                fred_list.append(data)
+            req = urllib.request.Request(url, headers=headers)
+            # 타임아웃을 3초로 극단적으로 짧게 잡아 앱이 절대 멈추지 않게 함
+            with urllib.request.urlopen(req, timeout=3) as response:
+                data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
+                data = data[(data.index >= start) & (data.index <= end)]
+                data = data.rename(columns={series_id: name})
+                if not data.empty:
+                    fred_list.append(data)
+        except urllib.error.HTTPError as e:
+            if e.code in [403, 429]: # 디도스 방어에 걸린 경우 즉각 감지
+                fred_blocked = True
         except Exception:
-            pass 
+            pass # 단순 타임아웃은 미련 없이 무시하고 다음으로 넘어감
                 
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
@@ -166,8 +165,8 @@ def fetch_data_robust():
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
     if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
 
-    # [2] 야후 파이낸스 데이터 다운로드
-    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
+    # [2] 야후 파이낸스 백업 다운로드 (VIX, 10Y 등 핵심 지표 이중화)
+    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F', '^VIX', '^TNX']
     df_yf = pd.DataFrame()
     try:
         yf_data = yf.download(tickers, start=start, end=end, progress=False, threads=False)
@@ -181,7 +180,8 @@ def fetch_data_robust():
             '^KS11': 'KOSPI', '^KQ11': 'KOSDAQ', 'KRW=X': 'USDKRW',
             'JPY=X': 'USDJPY', 'CL=F': 'WTI',
             'EURUSD=X': 'EURUSD', 'GBPUSD=X': 'GBPUSD', 'CNY=X': 'USDCNY',
-            '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
+            '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F',
+            '^VIX': 'VIX_yf', '^TNX': '10Y_yf' # 야후파이낸스 백업 지표
         })
         
         # 타임존 충돌 강제 제거
@@ -190,12 +190,18 @@ def fetch_data_robust():
     except Exception:
         pass
 
-    # 원본 데이터 보존 (타임존 맞춘 후 병합)
+    # 원본 데이터 보존 및 렌더링용 채우기 (ffill)
     df_raw = pd.concat([df_fred, df_yf], axis=1)
     df_raw = df_raw.sort_index()
-    
-    # 차트 렌더링용 채우기 (ffill) 적용된 데이터
     df_merged = df_raw.ffill().bfill().fillna(0)
+    
+    # [3] FRED가 막혔을 때 야후파이낸스 지표로 자동 구출 (플랜 B)
+    if 'VIX' not in df_merged.columns and 'VIX_yf' in df_merged.columns:
+        df_merged['VIX'] = df_merged['VIX_yf']
+        df_raw['VIX'] = df_raw['VIX_yf']
+    if '10Y' not in df_merged.columns and '10Y_yf' in df_merged.columns:
+        df_merged['10Y'] = df_merged['10Y_yf']
+        df_raw['10Y'] = df_raw['10Y_yf']
     
     # --- 강건한(Robust) 데이터 계산 로직 ---
     fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
@@ -231,13 +237,12 @@ def fetch_data_robust():
     
     return df_merged, df_raw
 
-with st.spinner('FRED 연준 서버와 안전하게 연결하여 데이터를 가져오고 있습니다...'):
-    df, df_raw = fetch_data_robust()
+with st.spinner('무한 로딩을 방지하며 빠르게 데이터를 가져옵니다 (최대 5초 소요)...'):
+    df, df_raw = fetch_data_breaker()
 
-# 데이터 수집 실패에 대한 방어 로직
-if df.empty or len(df.columns) < 5:
-    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 연준(FRED) 서버에서 현재 접근을 제한하고 있습니다. 몇 분 후 다시 접속해주세요.")
-    st.stop()
+# 데이터가 비어있어도 화면이 뻗지 않고 경고창만 띄움
+if 'Net_Liquidity' not in df.columns or (df['Net_Liquidity'] == 0).all():
+    st.warning("🚨 연준(FRED) 데이터 서버가 현재 접근을 일시적으로 차단하여 유동성 관련 일부 지표가 생략되었습니다. 무한 로딩을 방지하기 위해 핵심 지수만 강제로 띄웁니다.")
 
 # --- 다크 모드용 형광색 테마 설정 ---
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
