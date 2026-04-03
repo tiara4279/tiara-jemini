@@ -1,5 +1,5 @@
 # ============================================================
-#  글로벌 매크로 대시보드 — app.py (v4 - 타이틀 완전 수정)
+#  글로벌 매크로 대시보드 — app.py (v5 - 오류 및 스타일 완파)
 # ============================================================
 import subprocess, sys, os, warnings
 warnings.filterwarnings("ignore")
@@ -82,21 +82,14 @@ h1 {
     color: #FFFFFF !important;
     letter-spacing: 0.04em !important;
     line-height: 1.25 !important;
-    padding-bottom: 0 !important;
-    margin-bottom: 0 !important;
-    -webkit-text-fill-color: #FFFFFF !important;
-    opacity: 1 !important;
-    visibility: visible !important;
 }
 
 /* 네이티브 st.caption() 스타일 */
 .stCaption, .stCaption p, small {
-    font-size: 0.82rem !important;
+    font-size: 1rem !important; /* 1.5배 증가 */
     font-weight: 700 !important;
     color: #5A8AAE !important;
     letter-spacing: 0.14em !important;
-    -webkit-text-fill-color: #5A8AAE !important;
-    opacity: 1 !important;
 }
 
 /* ── 섹션 헤더 ── */
@@ -107,12 +100,11 @@ h1 {
     margin: 28px 0 12px;
     border-radius: 0 8px 8px 0;
     font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.85rem !important;
+    font-size: 1.275rem !important; /* 1.5배 증가 */
     font-weight: 700 !important;
     letter-spacing: 0.16em;
     color: #00D4FF !important;
     text-transform: uppercase;
-    -webkit-text-fill-color: #00D4FF !important;
 }
 
 /* ── 지표 카드 ── */
@@ -132,69 +124,56 @@ h1 {
     font-size: 0.72rem !important;
     font-weight: 700 !important;
     color: #6B8EAE !important;
-    -webkit-text-fill-color: #6B8EAE !important;
     letter-spacing: .10em;
     text-transform: uppercase;
     margin-bottom: 5px;
-    display: block;
 }
 .kval {
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 1.55rem !important;
     font-weight: 700 !important;
     color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
     line-height: 1.2;
-    display: block;
-    margin-bottom: 4px;
 }
 .kup {
     color: #22D98A !important;
-    -webkit-text-fill-color: #22D98A !important;
     font-size: .84rem !important;
     font-weight: 700 !important;
     font-family: 'IBM Plex Mono', monospace !important;
 }
 .kdn {
     color: #FF5555 !important;
-    -webkit-text-fill-color: #FF5555 !important;
     font-size: .84rem !important;
     font-weight: 700 !important;
     font-family: 'IBM Plex Mono', monospace !important;
 }
 .kna {
     color: #607090 !important;
-    -webkit-text-fill-color: #607090 !important;
     font-size: .84rem !important;
     font-weight: 600 !important;
 }
 .ksub {
     color: #4A6888 !important;
-    -webkit-text-fill-color: #4A6888 !important;
     font-size: .70rem !important;
     font-weight: 600 !important;
     margin-top: 4px;
-    display: block;
 }
 
 /* ── 리스크 배지 ── */
 .b-low {
     background: #10B98122; color: #22D98A !important;
-    -webkit-text-fill-color: #22D98A !important;
     border: 1px solid #10B98155;
     padding: 2px 9px; border-radius: 99px;
     font-size: .70rem !important; font-weight: 700 !important;
 }
 .b-mid {
     background: #F59E0B22; color: #FFCC44 !important;
-    -webkit-text-fill-color: #FFCC44 !important;
     border: 1px solid #F59E0B55;
     padding: 2px 9px; border-radius: 99px;
     font-size: .70rem !important; font-weight: 700 !important;
 }
 .b-hi {
     background: #EF444422; color: #FF5555 !important;
-    -webkit-text-fill-color: #FF5555 !important;
     border: 1px solid #EF444455;
     padding: 2px 9px; border-radius: 99px;
     font-size: .70rem !important; font-weight: 700 !important;
@@ -202,31 +181,18 @@ h1 {
 
 hr { border-color: #1A2A3F !important; }
 
-/* ── 타임스탬프 div ── */
-.ts-box {
-    text-align: right;
-    font-family: 'IBM Plex Mono', monospace !important;
-    font-size: 0.74rem !important;
-    font-weight: 600 !important;
-    color: #4A6A8A !important;
-    -webkit-text-fill-color: #4A6A8A !important;
-    padding-top: 14px;
-}
-
 /* ── 탭 ── */
 .stTabs [data-baseweb="tab-list"] {
     background: #0C1420; border-radius: 10px; gap: 4px; padding: 4px;
 }
 .stTabs [data-baseweb="tab"] {
     color: #5A7A9A !important;
-    -webkit-text-fill-color: #5A7A9A !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: .80rem !important;
     font-weight: 700 !important;
 }
 .stTabs [aria-selected="true"] {
     color: #00D4FF !important;
-    -webkit-text-fill-color: #00D4FF !important;
     background: #00D4FF18 !important;
     border-radius: 7px;
 }
@@ -236,7 +202,6 @@ hr { border-color: #1A2A3F !important; }
     background: #00D4FF18 !important;
     border: 1px solid #00D4FF55 !important;
     color: #00D4FF !important;
-    -webkit-text-fill-color: #00D4FF !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: .78rem !important;
     font-weight: 700 !important;
@@ -250,7 +215,6 @@ hr { border-color: #1A2A3F !important; }
 /* ── 알림 박스 ── */
 .stAlert p {
     font-weight: 700 !important;
-    font-size: 0.82rem !important;
 }
 
 /* ── 사이드바 ── */
@@ -262,7 +226,6 @@ section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] span {
     font-weight: 700 !important;
     color: #8AAAC8 !important;
-    -webkit-text-fill-color: #8AAAC8 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -328,12 +291,11 @@ def spark(hist_or_series, color="#00D4FF", h=75, is_series=False):
         y = hist_or_series.values if is_series else hist_or_series["Close"].values
         if len(y) == 0:
             return
-        c6 = color[:7]
         fig = go.Figure(go.Scatter(
             x=x, y=y, mode="lines",
-            line=dict(color=c6, width=1.8),
+            line=dict(color=color[:7], width=1.8),
             fill="tozeroy",
-            fillcolor=hex_to_rgba(c6, 0.10),
+            fillcolor=hex_to_rgba(color[:7], 0.10),
         ))
         fig.update_layout(
             height=h, margin=dict(l=0, r=0, t=0, b=0),
@@ -379,16 +341,14 @@ CHART_LAYOUT = dict(
 
 
 # ═══════════════════════════════════════════════════════════
-#  헤더 — st.title() 네이티브 사용 (가장 확실한 방법)
+#  헤더 — 타이틀, 타임스탬프, 새로고침 버튼
 # ═══════════════════════════════════════════════════════════
 
 now_str = datetime.utcnow().strftime("%Y-%m-%d  %H:%M  UTC")
 
-# 타이틀은 컬럼 밖에 배치 — 렌더링 가장 안정적
 st.title("📡 글로벌 매크로 대시보드")
 st.caption("GLOBAL MACRO MONITOR — REAL-TIME FINANCIAL INDICATORS")
 
-# 타임스탬프 + 새로고침 버튼
 ts_col, btn_col = st.columns([6, 1])
 with ts_col:
     st.markdown(
@@ -518,7 +478,7 @@ hy = get_fred("BAMLH0A0HYM2")
 if hy is not None:
     lv = float(hy.iloc[-1]); pv = float(hy.iloc[-2])
     chg_hy = (lv - pv) / pv * 100
-    fe1, _fe2 = st.columns(2)
+    fe1, fe2 = st.columns(2)
     with fe1:
         st.markdown(card("하이일드 스프레드 (OAS)", f(lv, 2, suf="%"), chg_hy,
                          "ICE BofA US HY OAS — FRED"), unsafe_allow_html=True)
