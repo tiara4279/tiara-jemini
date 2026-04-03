@@ -921,11 +921,19 @@ st.markdown("---")
 st.markdown("## 🔬 리스크 지표 상세 분석")
 st.markdown("지표를 선택하면 상세 분석 및 현재 상태를 확인할 수 있습니다.")
 
+# ── hex to rgba 변환 함수 ──
+def hex_to_rgba(hex_color, alpha=0.08):
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 # ── 지표 정의 ──
 RISK_INDICATORS = {
     "VIX 공포지수": {
-        "fred_id": None,
         "yf_ticker": "^VIX",
+        "fred_id": None,
         "description": """
 **VIX (CBOE Volatility Index)** 는 S&P 500 옵션 시장에서 도출된 **향후 30일 주식 시장의 예상 변동성 지수**입니다.
 일명 **"공포 지수(Fear Index)"** 라고 불리며, 투자자들의 불안 심리를 수치화한 것입니다.
@@ -935,25 +943,24 @@ RISK_INDICATORS = {
 - **글로벌 위기 선행지표**: 금융 위기, 코로나, 금리 쇼크 등에서 급등
         """,
         "thresholds": {
-            "safe": (0, 15),
+            "safe":    (0, 15),
             "caution": (15, 25),
             "warning": (25, 35),
-            "danger": (35, 999),
+            "danger":  (35, 9999),
         },
         "threshold_labels": {
-            "safe": "안정 — 시장이 매우 차분하고 낙관적입니다.",
+            "safe":    "안정 — 시장이 매우 차분하고 낙관적입니다.",
             "caution": "보통 — 정상 범위이나 약간의 불확실성 존재.",
             "warning": "주의 ⚠️ — 시장 변동성 확대 구간. 방어적 포지션 고려.",
-            "danger": "심각 🔴 — 공포 확산! 과거 위기 수준. 현금 비중 확대 권고.",
+            "danger":  "심각 🔴 — 공포 확산! 과거 위기 수준. 현금 비중 확대 권고.",
         },
         "color": "#ef4444",
         "unit": "",
         "period": "2y",
     },
     "MOVE 채권변동성": {
-        "fred_id": None,
         "yf_ticker": None,
-        "fred_series": "ICBMRATE",  # 대체: Treasury 변동성 proxy
+        "fred_id": "ICBMRATE",
         "description": """
 **MOVE Index (Merrill Lynch Option Volatility Estimate)** 는 **미국 국채 시장의 내재 변동성 지수**입니다.
 채권판 VIX라고도 불리며, 금리 시장의 불확실성을 나타냅니다.
@@ -963,24 +970,24 @@ RISK_INDICATORS = {
 - **은행 시스템 스트레스와 연동**: 2023년 실리콘밸리 은행 사태 시 급등
         """,
         "thresholds": {
-            "safe": (0, 80),
+            "safe":    (0, 80),
             "caution": (80, 120),
             "warning": (120, 160),
-            "danger": (160, 999),
+            "danger":  (160, 9999),
         },
         "threshold_labels": {
-            "safe": "안정 — 채권 시장 안정적.",
+            "safe":    "안정 — 채권 시장 안정적.",
             "caution": "보통 — 금리 불확실성 다소 존재.",
             "warning": "주의 ⚠️ — 채권 변동성 확대. 듀레이션 리스크 주의.",
-            "danger": "심각 🔴 — 채권 시장 극도의 불안. 금융 시스템 위기 가능성.",
+            "danger":  "심각 🔴 — 채권 시장 극도의 불안. 금융 시스템 위기 가능성.",
         },
         "color": "#f59e0b",
         "unit": "",
         "period": "2y",
     },
     "HY OAS 신용스프레드": {
-        "fred_id": "BAMLH0A0HYM2",
         "yf_ticker": None,
+        "fred_id": "BAMLH0A0HYM2",
         "description": """
 **HY OAS (High Yield Option-Adjusted Spread)** 는 **하이일드(정크) 채권과 미국 국채 간의 금리 차이**입니다.
 기업 신용 리스크와 경기 침체 우려를 나타내는 핵심 지표입니다.
@@ -990,24 +997,24 @@ RISK_INDICATORS = {
 - **유동성 경색 시그널**: 금융위기 시 10%+ 급등
         """,
         "thresholds": {
-            "safe": (0, 3.5),
+            "safe":    (0, 3.5),
             "caution": (3.5, 5.5),
             "warning": (5.5, 8.0),
-            "danger": (8.0, 999),
+            "danger":  (8.0, 9999),
         },
         "threshold_labels": {
-            "safe": "안정 — 기업 신용 시장 건전.",
+            "safe":    "안정 — 기업 신용 시장 건전.",
             "caution": "보통 — 신용 위험 소폭 상승. 주시 필요.",
             "warning": "주의 ⚠️ — 신용 스프레드 확대. 기업 부도 리스크 증가.",
-            "danger": "심각 🔴 — 신용 위기 경보! 경기 침체 가능성 매우 높음.",
+            "danger":  "심각 🔴 — 신용 위기 경보! 경기 침체 가능성 매우 높음.",
         },
         "color": "#8b5cf6",
         "unit": "%",
         "period": "2y",
     },
     "VVIX (VIX의 변동성)": {
-        "fred_id": None,
         "yf_ticker": "^VVIX",
+        "fred_id": None,
         "description": """
 **VVIX (CBOE VVIX Index)** 는 **VIX 자체의 변동성**을 측정하는 지수입니다.
 즉, "공포지수의 공포지수"로, 시장 불안의 2차 증폭 현상을 포착합니다.
@@ -1017,24 +1024,24 @@ RISK_INDICATORS = {
 - **옵션 시장 구조 변화 반영**: 헤지 수요 급증 시 먼저 반응
         """,
         "thresholds": {
-            "safe": (0, 90),
+            "safe":    (0, 90),
             "caution": (90, 110),
             "warning": (110, 130),
-            "danger": (130, 999),
+            "danger":  (130, 9999),
         },
         "threshold_labels": {
-            "safe": "안정 — 변동성 시장 안정.",
+            "safe":    "안정 — 변동성 시장 안정.",
             "caution": "보통 — 변동성 확대 가능성 다소 존재.",
             "warning": "주의 ⚠️ — VIX 급변 가능성. 옵션 헤지 수요 증가.",
-            "danger": "심각 🔴 — 극단적 변동성 폭발 임박 가능성!",
+            "danger":  "심각 🔴 — 극단적 변동성 폭발 임박 가능성!",
         },
         "color": "#06b6d4",
         "unit": "",
         "period": "2y",
     },
     "STLFSI 금융스트레스": {
-        "fred_id": "STLFSI4",
         "yf_ticker": None,
+        "fred_id": "STLFSI4",
         "description": """
 **St. Louis Fed Financial Stress Index (STLFSI)** 는 **미국 금융 시스템 전반의 스트레스 수준**을 나타내는 지수입니다.
 18개 금융 시장 변수를 종합하여 주간 단위로 발표합니다.
@@ -1044,16 +1051,16 @@ RISK_INDICATORS = {
 - **연준 정책 판단 지표**: 연준이 실제로 활용하는 공식 지표
         """,
         "thresholds": {
-            "safe": (-999, -0.5),
+            "safe":    (-9999, -0.5),
             "caution": (-0.5, 0.5),
             "warning": (0.5, 1.5),
-            "danger": (1.5, 999),
+            "danger":  (1.5, 9999),
         },
         "threshold_labels": {
-            "safe": "안정 — 금융 시스템 스트레스 매우 낮음.",
+            "safe":    "안정 — 금융 시스템 스트레스 매우 낮음.",
             "caution": "보통 — 정상 범위 내 스트레스.",
             "warning": "주의 ⚠️ — 금융 스트레스 상승. 시장 경계 필요.",
-            "danger": "심각 🔴 — 금융 시스템 극심한 스트레스! 위기 단계.",
+            "danger":  "심각 🔴 — 금융 시스템 극심한 스트레스! 위기 단계.",
         },
         "color": "#10b981",
         "unit": "",
@@ -1062,7 +1069,7 @@ RISK_INDICATORS = {
 }
 
 # ── 상태 판정 함수 ──
-def get_status(value, thresholds, labels):
+def get_risk_status(value, thresholds, labels):
     for key, (low, high) in thresholds.items():
         if low <= value < high:
             return key, labels[key]
@@ -1071,7 +1078,7 @@ def get_status(value, thresholds, labels):
 STATUS_STYLE = {
     "safe":    {"bg": "#064e3b", "border": "#10b981", "icon": "✅", "text": "#6ee7b7", "label": "안   전"},
     "caution": {"bg": "#1c1917", "border": "#f59e0b", "icon": "🟡", "text": "#fcd34d", "label": "보   통"},
-    "warning": {"bg": "#431407", "border": "#f97316", "icon": "⚠️", "text": "#fb923c", "label": "주   의"},
+    "warning": {"bg": "#431407", "border": "#f97316", "icon": "⚠️",  "text": "#fb923c", "label": "주   의"},
     "danger":  {"bg": "#450a0a", "border": "#ef4444", "icon": "🔴", "text": "#fca5a5", "label": "심   각"},
 }
 
@@ -1086,24 +1093,23 @@ indicator_names = list(RISK_INDICATORS.keys())
 for i, name in enumerate(indicator_names):
     with cols_btn[i]:
         is_selected = st.session_state["selected_risk"] == name
-        btn_style = "primary" if is_selected else "secondary"
         if st.button(
             f"{'🔵 ' if is_selected else ''}{name}",
             key=f"risk_btn_{i}",
             use_container_width=True,
-            type=btn_style,
+            type="primary" if is_selected else "secondary",
         ):
             st.session_state["selected_risk"] = name
             st.rerun()
 
-# ── 선택된 지표 데이터 로드 ──
+# ── 선택된 지표 로드 ──
 selected = st.session_state["selected_risk"]
 info = RISK_INDICATORS[selected]
 
-st.markdown(f"---")
+st.markdown("---")
 st.markdown(f"## 🔎 {selected} 상세 분석")
 
-# 데이터 로딩
+# ── 데이터 로딩 ──
 detail_data = None
 load_error = None
 
@@ -1119,7 +1125,11 @@ try:
         fred_detail = Fred(api_key=FRED_API_KEY)
         end_dt = datetime.today()
         start_dt = end_dt - timedelta(days=730)
-        raw = fred_detail.get_series(info["fred_id"], observation_start=start_dt, observation_end=end_dt)
+        raw = fred_detail.get_series(
+            info["fred_id"],
+            observation_start=start_dt,
+            observation_end=end_dt
+        )
         if raw is not None and not raw.empty:
             detail_data = raw.dropna()
 except Exception as e:
@@ -1127,108 +1137,96 @@ except Exception as e:
 
 # ── 현재값 및 상태 판정 ──
 current_val = None
-status_key = "caution"
+status_key  = "caution"
 status_label = "데이터 없음"
+change = 0.0
+change_pct = 0.0
 
 if detail_data is not None and len(detail_data) > 0:
-    current_val = float(detail_data.iloc[-1])
-    prev_val = float(detail_data.iloc[-2]) if len(detail_data) > 1 else current_val
-    change = current_val - prev_val
-    change_pct = (change / prev_val * 100) if prev_val != 0 else 0
-    status_key, status_label = get_status(current_val, info["thresholds"], info["threshold_labels"])
+    current_val  = float(detail_data.iloc[-1])
+    prev_val     = float(detail_data.iloc[-2]) if len(detail_data) > 1 else current_val
+    change       = current_val - prev_val
+    change_pct   = (change / prev_val * 100) if prev_val != 0 else 0
+    status_key, status_label = get_risk_status(current_val, info["thresholds"], info["threshold_labels"])
 
 style = STATUS_STYLE[status_key]
 
-# ── 상태 카드 (components.html) ──
-unit_str = info["unit"]
-val_display = f"{current_val:.2f}{unit_str}" if current_val is not None else "N/A"
-change_display = f"{change:+.2f}" if current_val is not None else "-"
-change_color = "#ef4444" if (current_val is not None and change > 0) else "#10b981"
-
-# 기간 통계
+# ── 통계 계산 ──
 if detail_data is not None and len(detail_data) > 0:
-    val_min = float(detail_data.min())
-    val_max = float(detail_data.max())
-    val_avg = float(detail_data.mean())
+    val_min    = float(detail_data.min())
+    val_max    = float(detail_data.max())
+    val_avg    = float(detail_data.mean())
     percentile = float((detail_data <= current_val).mean() * 100)
 else:
     val_min = val_max = val_avg = percentile = 0.0
 
+unit_str      = info["unit"]
+val_display   = f"{current_val:.2f}{unit_str}" if current_val is not None else "N/A"
+change_display = f"{change:+.2f}" if current_val is not None else "-"
+change_color  = "#ef4444" if change > 0 else "#10b981"
+
+# ── 상태 카드 HTML ──
 status_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ background: transparent; font-family: 'Segoe UI', sans-serif; padding: 10px 0; }}
-  .status-wrapper {{
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-  }}
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  body {{ background:transparent; font-family:'Segoe UI',sans-serif; padding:10px 0; }}
+  .wrapper {{ display:flex; gap:14px; flex-wrap:wrap; }}
   .status-card {{
-    flex: 1;
-    min-width: 180px;
-    background: {style['bg']};
-    border: 2px solid {style['border']};
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
+    flex:1.5; min-width:200px;
+    background:{style['bg']};
+    border:2px solid {style['border']};
+    border-radius:14px; padding:22px;
+    text-align:center;
   }}
-  .status-icon {{ font-size: 40px; margin-bottom: 8px; }}
-  .status-label {{
-    font-size: 22px;
-    font-weight: 900;
-    color: {style['text']};
-    letter-spacing: 4px;
-    margin-bottom: 6px;
-  }}
-  .status-desc {{ font-size: 13px; color: #9ca3af; line-height: 1.5; }}
+  .s-icon  {{ font-size:44px; margin-bottom:10px; }}
+  .s-label {{ font-size:24px; font-weight:900; color:{style['text']}; letter-spacing:4px; margin-bottom:8px; }}
+  .s-desc  {{ font-size:13px; color:#9ca3af; line-height:1.6; }}
   .metric-card {{
-    flex: 1;
-    min-width: 130px;
-    background: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 12px;
-    padding: 16px;
-    text-align: center;
+    flex:1; min-width:120px;
+    background:#1f2937;
+    border:1px solid #374151;
+    border-radius:12px; padding:16px;
+    text-align:center;
   }}
-  .metric-title {{ font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }}
-  .metric-value {{ font-size: 26px; font-weight: 800; color: #f9fafb; }}
-  .metric-sub {{ font-size: 12px; margin-top: 4px; }}
+  .m-title {{ font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }}
+  .m-value {{ font-size:24px; font-weight:800; color:#f9fafb; }}
+  .m-sub   {{ font-size:12px; margin-top:4px; color:#6b7280; }}
 </style>
 </head>
 <body>
-<div class="status-wrapper">
+<div class="wrapper">
   <div class="status-card">
-    <div class="status-icon">{style['icon']}</div>
-    <div class="status-label">{style['label']}</div>
-    <div class="status-desc">{status_label}</div>
+    <div class="s-icon">{style['icon']}</div>
+    <div class="s-label">{style['label']}</div>
+    <div class="s-desc">{status_label}</div>
   </div>
   <div class="metric-card">
-    <div class="metric-title">현재 값</div>
-    <div class="metric-value">{val_display}</div>
-    <div class="metric-sub" style="color:{change_color};">{change_display} 전일비</div>
+    <div class="m-title">현재 값</div>
+    <div class="m-value">{val_display}</div>
+    <div class="m-sub" style="color:{change_color};">{change_display} 전일비</div>
   </div>
   <div class="metric-card">
-    <div class="metric-title">2년 최저</div>
-    <div class="metric-value">{val_min:.2f}</div>
-    <div class="metric-sub" style="color:#6b7280;">Low</div>
+    <div class="m-title">2년 최저</div>
+    <div class="m-value">{val_min:.2f}</div>
+    <div class="m-sub">Low</div>
   </div>
   <div class="metric-card">
-    <div class="metric-title">2년 최고</div>
-    <div class="metric-value">{val_max:.2f}</div>
-    <div class="metric-sub" style="color:#6b7280;">High</div>
+    <div class="m-title">2년 최고</div>
+    <div class="m-value">{val_max:.2f}</div>
+    <div class="m-sub">High</div>
   </div>
   <div class="metric-card">
-    <div class="metric-title">2년 평균</div>
-    <div class="metric-value">{val_avg:.2f}</div>
-    <div class="metric-sub" style="color:#6b7280;">Avg</div>
+    <div class="m-title">2년 평균</div>
+    <div class="m-value">{val_avg:.2f}</div>
+    <div class="m-sub">Avg</div>
   </div>
   <div class="metric-card">
-    <div class="metric-title">백분위</div>
-    <div class="metric-value" style="color:{style['text']};">{percentile:.0f}%</div>
-    <div class="metric-sub" style="color:#6b7280;">2년 기준</div>
+    <div class="m-title">백분위</div>
+    <div class="m-value" style="color:{style['text']};">{percentile:.0f}%</div>
+    <div class="m-sub">2년 기준</div>
   </div>
 </div>
 </body>
@@ -1239,43 +1237,45 @@ components.html(status_html, height=160, scrolling=False)
 # ── 큰 상세 그래프 ──
 if detail_data is not None and len(detail_data) > 0:
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
 
     df_detail = detail_data.reset_index()
     df_detail.columns = ["Date", "Value"]
 
-    # 기준선 thresholds
     th = info["thresholds"]
 
     fig_detail = go.Figure()
 
-    # 배경 구간 색칠
+    # 배경 구간 색상
     zone_colors = {
         "safe":    "rgba(16,185,129,0.07)",
         "caution": "rgba(245,158,11,0.07)",
         "warning": "rgba(249,115,22,0.10)",
         "danger":  "rgba(239,68,68,0.12)",
     }
+
+    y_data_min = float(df_detail["Value"].min())
+    y_data_max = float(df_detail["Value"].max())
+    y_padding  = abs(y_data_max - y_data_min) * 0.1
+
     x_min = df_detail["Date"].min()
     x_max = df_detail["Date"].max()
 
     for zone, (z_low, z_high) in th.items():
-        actual_low  = max(z_low,  float(df_detail["Value"].min()) - abs(float(df_detail["Value"].min()) * 0.1))
-        actual_high = min(z_high, float(df_detail["Value"].max()) + abs(float(df_detail["Value"].max()) * 0.1))
-        if actual_low >= actual_high:
+        y0 = z_low  if z_low  > -900 else y_data_min - y_padding
+        y1 = z_high if z_high < 9000 else y_data_max + y_padding
+        if y0 >= y1:
             continue
         fig_detail.add_shape(
             type="rect",
             xref="x", yref="y",
             x0=x_min, x1=x_max,
-            y0=z_low if z_low > -900 else actual_low,
-            y1=z_high if z_high < 900 else actual_high,
+            y0=y0, y1=y1,
             fillcolor=zone_colors[zone],
             line_width=0,
             layer="below",
         )
 
-    # 메인 라인
+    # 메인 라인 + 면적
     fig_detail.add_trace(go.Scatter(
         x=df_detail["Date"],
         y=df_detail["Value"],
@@ -1283,7 +1283,8 @@ if detail_data is not None and len(detail_data) > 0:
         name=selected,
         line=dict(color=info["color"], width=2.5),
         fill="tozeroy",
-        fillcolor=info["color"].replace(")", ", 0.08)").replace("rgb", "rgba") if "rgb" in info["color"] else info["color"] + "15",
+        fillcolor=hex_to_rgba(info["color"], 0.08),
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>값: %{y:.2f}<extra></extra>",
     ))
 
     # 현재값 수평선
@@ -1292,44 +1293,42 @@ if detail_data is not None and len(detail_data) > 0:
             y=current_val,
             line_dash="dot",
             line_color=style["border"],
-            line_width=1.5,
+            line_width=1.8,
             annotation_text=f"  현재: {current_val:.2f}",
             annotation_position="right",
             annotation_font_color=style["text"],
+            annotation_font_size=13,
         )
 
-    # 각 threshold 기준선
-    threshold_line_colors = {
+    # threshold 기준선
+    th_line_colors = {
         "safe":    "#10b981",
         "caution": "#f59e0b",
         "warning": "#f97316",
         "danger":  "#ef4444",
     }
-    th_boundaries = set()
+    drawn = set()
     for zone, (z_low, z_high) in th.items():
-        if z_low > -900:
-            th_boundaries.add((z_low, zone))
-        if z_high < 900:
-            th_boundaries.add((z_high, zone))
-
-    for (th_val, zone) in th_boundaries:
-        fig_detail.add_hline(
-            y=th_val,
-            line_dash="dash",
-            line_color=threshold_line_colors[zone],
-            line_width=1,
-            opacity=0.5,
-        )
+        for th_val in [z_low, z_high]:
+            if -900 < th_val < 9000 and th_val not in drawn:
+                fig_detail.add_hline(
+                    y=th_val,
+                    line_dash="dash",
+                    line_color=th_line_colors[zone],
+                    line_width=1,
+                    opacity=0.45,
+                )
+                drawn.add(th_val)
 
     fig_detail.update_layout(
         height=520,
-        margin=dict(l=10, r=60, t=50, b=40),
+        margin=dict(l=10, r=80, t=60, b=40),
         paper_bgcolor="#111827",
         plot_bgcolor="#111827",
         font=dict(color="#d1d5db", size=13),
         title=dict(
             text=f"<b>{selected}</b> — 최근 2년 추이",
-            font=dict(size=18, color="#f9fafb"),
+            font=dict(size=20, color="#f9fafb"),
             x=0.01,
         ),
         xaxis=dict(
@@ -1354,19 +1353,23 @@ else:
     if load_error:
         st.error(f"❌ 데이터 로드 실패: `{load_error}`")
     else:
-        st.warning("⚠️ 현재 선택된 지표의 데이터를 불러오지 못했습니다. FRED API 키 또는 네트워크를 확인하세요.")
+        st.warning("⚠️ 데이터를 불러오지 못했습니다. FRED API 키 또는 네트워크를 확인하세요.")
 
 # ── 지표 설명 ──
 with st.expander("📖 지표 상세 설명 보기", expanded=True):
     st.markdown(info["description"])
 
-    # 단계별 기준 테이블
-    st.markdown("#### 📊 판정 기준")
+    st.markdown("#### 📊 단계별 판정 기준")
+    status_emojis = {
+        "safe":    "✅ 안전",
+        "caution": "🟡 보통",
+        "warning": "⚠️ 주의",
+        "danger":  "🔴 심각",
+    }
     th_rows = []
-    status_emojis = {"safe": "✅ 안전", "caution": "🟡 보통", "warning": "⚠️ 주의", "danger": "🔴 심각"}
     for zone, (z_low, z_high) in info["thresholds"].items():
-        low_str = str(z_low) if z_low > -900 else "-∞"
-        high_str = str(z_high) if z_high < 900 else "+∞"
+        low_str  = str(z_low)  if z_low  > -900 else "-∞"
+        high_str = str(z_high) if z_high < 9000 else "+∞"
         th_rows.append({
             "상태": status_emojis[zone],
             "범위": f"{low_str} ~ {high_str}{info['unit']}",
