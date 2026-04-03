@@ -458,8 +458,8 @@ sec("🏦", "유동성을 좌우하는 핵심 창구 (연준)")
 
 LIQ = [
     ("WALCL",    "연준 총자산 (대차대조표)", "#3B82F6", 7_200),
-    ("WRBWFRBL", "지급준비금 잔고",           "#10B981", 3_300),
-    ("WTREGEN",  "TGA (재무부 일반계정)",     "#F59E0B",   750),
+    ("WRBWFRBL", "지급준비금 잔고",            "#10B981", 3_300),
+    ("WTREGEN",  "TGA (재무부 일반계정)",      "#F59E0B",   750),
 ]
 l1, l2, l3 = st.columns(3)
 for col, (sid, label, color, demo) in zip([l1, l2, l3], LIQ):
@@ -602,317 +602,152 @@ with tab2:
         margin=dict(l=20, r=20, t=45, b=20),
         font=dict(color="#8AAAC8", family="IBM Plex Mono", size=11),
     )
-    fig2.update_xaxes(gridcolor="#141E2E", color="#4A6A8A")
-    fig2.update_yaxes(gridcolor="#141E2E", color="#4A6A8A")
-    st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-
-with tab3:
-    risk_pairs = [
-        ("VIX",  "^VIX",  "#EF4444"),
-        ("MOVE", "^MOVE", "#F59E0B"),
-        ("HYG",  "HYG",   "#8B5CF6"),
-    ]
-    fig3 = go.Figure()
-    for name, tk, clr in risk_pairs:
-        _, _, h = get_yf(tk, "1y", "1wk")
-        if h is not None and not h.empty:
-            n = h["Close"] / h["Close"].iloc[0] * 100
-            fig3.add_trace(go.Scatter(
-                x=h.index, y=n, mode="lines",
-                name=name, line=dict(color=clr, width=2.2)
-            ))
-    fig3.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
-    st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
-
-with tab4:
-    kr_pairs = [
-        ("KOSPI",  "^KS11", "#F59E0B"),
-        ("KOSDAQ", "^KQ11", "#10B981"),
-    ]
-    fig4 = go.Figure()
-    for name, tk, clr in kr_pairs:
-        _, _, h = get_yf(tk, "6mo", "1d")
-        if h is not None and not h.empty:
-            n = h["Close"] / h["Close"].iloc[0] * 100
-            fig4.add_trace(go.Scatter(
-                x=h.index, y=n, mode="lines",
-                name=name, line=dict(color=clr[:7], width=2.2),
-                fill="tozeroy",
-                fillcolor=hex_to_rgba(clr[:7], 0.10)
-            ))
-    fig4.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
-    st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
-
-
-# ═══════════════════════════════════════════════════════════
-#  §9  Net Liquidity (달러기호 충돌 완전 수정)
-# ═══════════════════════════════════════════════════════════
-import streamlit.components.v1 as components
-
-sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
-st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
-
-# ── 개별 데이터 로딩
-_walcl = get_fred('WALCL',     limit=300)   # 단위: 백만달러 (M$)
-_rrp   = get_fred('RRPONTSYD', limit=300)   # 단위: 십억달러 (B$)
-_tga   = get_fred('WTREGEN',   limit=300)   # 단위: 백만달러 (M$)
-
-# ── S&P500 직접 호출
-try:
-    _sp500_raw = yf.Ticker('^GSPC').history(period='1y', interval='1d', auto_adjust=True)
-    _sp500_ok  = not _sp500_raw.empty and len(_sp500_raw) > 10
+    report_html = f"""
+    <div style="background: linear-gradient(140deg, #131E2E, #0C1520); border: 1px solid #1E3050; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <div style="font-size: 1.1rem; font-weight: 800; color: #00D4FF; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+            <span>💡</span> 핵심 자산 배분 전략
+        </div>
+        <div style="font-size: 1rem; font-weight: 600; line-height: 1.6; margin-bottom: 20px; color: {s_color}; background: #060A12; padding: 16px; border-radius: 8px; border: 1px solid #1A2A3F;">
+            {strategy}
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
+            <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
+                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 시장 심리 및 유동성</div>
+                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
+                    <div>• {vix_msg}</div>
+                    <div>• {sys_msg}</div>
+                </div>
+            </div>
+            <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
+                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 매크로 및 신용 환경</div>
+                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
+                    <div>• {sofr_msg}</div>
+                    <div>• {totll_msg}</div>
+                    <div>• {yield_msg}</div>
+                    <div>• {bei_msg}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(report_html, unsafe_allow_html=True)
 except Exception:
-    _sp500_raw = None
-    _sp500_ok  = False
+    pass
 
-_data_ok = (
-    _walcl is not None and len(_walcl) > 1 and
-    _rrp   is not None and len(_rrp)   > 1 and
-    _tga   is not None and len(_tga)   > 1 and
-    _sp500_ok
-)
 
-if _data_ok:
-    try:
-        # ── 단위 통일 → T$
-        walcl_t = _walcl / 1_000_000.0   # M$ → T$
-        rrp_t   = _rrp   / 1_000.0       # B$ → T$
-        tga_t   = _tga   / 1_000_000.0   # M$ → T$
+# ═══════════════════════════════════════════════════════════
+#  §12 심층 지표 분석 (상세보기)
+# ═══════════════════════════════════════════════════════════
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
+sec("🔍", "심층 지표 분석 (상세보기)")
+st.markdown("<div class='ksub' style='margin-bottom: 15px;'>원하는 지표를 선택하여 과거 3년간의 추이와 AI 평가, 상세 의미를 확인하세요.</div>", unsafe_allow_html=True)
 
-        df_liq = pd.DataFrame({'WALCL': walcl_t, 'RRP': rrp_t, 'TGA': tga_t})
-        df_liq['Net_Liquidity'] = df_liq['WALCL'] - df_liq['RRP'] - df_liq['TGA']
+DETAIL_META = {
+    "VIX (공포지수)": {"ticker": "^VIX", "type": "yf", "desc": "시장이 앞으로 얼마나 출렁일지 예상하는 지수입니다. 20 이하는 안정, 30 이상은 경계 수준입니다."},
+    "MOVE (채권 변동성)": {"ticker": "^MOVE", "type": "yf", "desc": "미국 국채 시장의 변동성을 보여주는 채권판 VIX입니다. 주식 시장의 공포지수보다 채권 시장의 발작이 거시적 금융 위기를 훨씬 더 빨리 잡아냅니다."},
+    "장단기 금리차 (10Y-2Y)": {"ticker": "T10Y2Y", "type": "fred", "desc": "10년 금리에서 2년 금리를 뺀 값입니다. 이 값이 음수(-)로 뒤집히면 '역전'이라고 하며, 역사적으로 강력한 경기침체 선행 경고 신호입니다."},
+    "하이일드 스프레드": {"ticker": "BAMLH0A0HYM2", "type": "fred", "desc": "안전한 미국 국채와 부도 위험이 있는 투기등급 채권 간의 금리 격차입니다. 이 격차가 벌어지면 한계 기업들의 자금줄이 마르고 부도 위험이 커진다는 뜻(신용 경색)입니다."},
+    "달러 인덱스 (DXY)": {"ticker": "DX-Y.NYB", "type": "yf", "desc": "유로, 엔 등 주요 주요 통화 대비 미국 달러의 평균 가치입니다. 강달러 현상은 글로벌 투자 자금이 미국으로 빨려 들어가 신흥국 증시 유동성에 악재로 작용합니다."},
+    "연준 총자산 (WALCL)": {"ticker": "WALCL", "type": "fred", "desc": "미국 중앙은행(Fed)이 돈을 찍어내어 보유하고 있는 자산의 총합입니다. 상승하면 시중에 돈을 푸는 양적완화(QE), 하락하면 시중의 달러를 흡수하는 양적긴축(QT)을 의미합니다."},
+    "역레포 잔액 (RRP)": {"ticker": "RRPONTSYD", "type": "fred", "desc": "시중에 갈 곳을 잃은 단기 잉여 대기 자금이 연준 창고로 들어간 금액입니다. 이 잔액이 줄어든다는 것은 창고에서 돈이 빠져나와 주식이나 실물 시장으로 흘러가고 있다는 긍정적인 신호입니다."},
+}
 
-        # ── S&P500 타임존 제거
-        sp500_s = _sp500_raw['Close'].copy()
-        if hasattr(sp500_s.index, 'tz') and sp500_s.index.tz is not None:
-            sp500_s.index = sp500_s.index.tz_localize(None)
+def eval_detail(ticker, val):
+    if ticker == "^VIX":
+        if val >= 30: return "🚨 경계 (위험 심리 극대화)", "#FF5555"
+        elif val >= 20: return "⚠️ 주의 (변동성 확대)", "#F59E0B"
+        else: return "✅ 안정 (위험 자산 선호)", "#22D98A"
+    elif ticker == "^MOVE":
+        if val >= 140: return "🚨 위험 (채권 시장 패닉)", "#FF5555"
+        elif val >= 100: return "⚠️ 주의 (금리 변동성 확대)", "#F59E0B"
+        else: return "✅ 안정 (채권 시장 평온)", "#22D98A"
+    elif ticker == "T10Y2Y":
+        if val < 0: return "🚨 침체 경고 (장단기 금리 역전)", "#FF5555"
+        else: return "✅ 정상 (경제 성장 기대)", "#22D98A"
+    elif ticker == "BAMLH0A0HYM2":
+        if val >= 5.0: return "🚨 경고 (신용 경색 위험)", "#FF5555"
+        elif val >= 4.0: return "⚠️ 주의 (기업 대출 여건 악화)", "#F59E0B"
+        else: return "✅ 안정 (풍부한 신용 유동성)", "#22D98A"
+    elif ticker == "DX-Y.NYB":
+        if val >= 105: return "🚨 강세 (글로벌 유동성 축소 우려)", "#FF5555"
+        elif val < 100: return "✅ 약세 (위험 자산 랠리 우호적)", "#22D98A"
+        else: return "⚖️ 중립 (박스권 유지)", "#F59E0B"
+    else:
+        return "📊 지표 모니터링 중", "#00D4FF"
 
-        # ── 날짜 정규화 + 병합
-        df_liq.index  = pd.to_datetime(df_liq.index).normalize()
-        sp500_s.index = pd.to_datetime(sp500_s.index).normalize()
+selected_ind_name = st.selectbox("분석할 지표 선택", list(DETAIL_META.keys()))
+meta = DETAIL_META[selected_ind_name]
 
-        df_plot = (
-            df_liq[['Net_Liquidity', 'WALCL', 'RRP', 'TGA']]
-            .reindex(sp500_s.index, method='ffill')
-            .join(sp500_s.rename('Close'))
-            .dropna()
-        )
+with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
+    if meta["type"] == "yf":
+        _, _, df_detail = get_yf(meta["ticker"], "3y", "1d")
+        series_detail = df_detail["Close"] if df_detail is not None else None
+    else:
+        series_detail = get_fred(meta["ticker"], limit=756) # 약 3년치(252영업일 * 3)
 
-        if len(df_plot) > 10:
-            latest_walcl = float(df_plot['WALCL'].iloc[-1])
-            latest_rrp   = float(df_plot['RRP'].iloc[-1])
-            latest_tga   = float(df_plot['TGA'].iloc[-1])
-            latest_nl    = float(df_plot['Net_Liquidity'].iloc[-1])
-            latest_sp    = float(df_plot['Close'].iloc[-1])
-            latest_date  = df_plot.index[-1].strftime('%Y-%m-%d')
+    if series_detail is not None and not series_detail.empty:
+        cur_val = float(series_detail.iloc[-1])
+        prev_val = float(series_detail.iloc[-2]) if len(series_detail) > 1 else cur_val
+        chg = cur_val - prev_val
+        chg_pct = (chg / abs(prev_val)) * 100 if prev_val != 0 else 0
+        
+        status_text, status_color = eval_detail(meta["ticker"], cur_val)
+        
+        # 단위 스케일 보정 (FRED 자산 지표들)
+        unit_str = ""
+        if meta["ticker"] in ["WALCL", "RRPONTSYD"]:
+            series_detail = series_detail / 1000
+            cur_val, prev_val, chg = cur_val / 1000, prev_val / 1000, chg / 1000
+            unit_str = " (B$)"
+            
+        fig_det = go.Figure()
+        fig_det.add_trace(go.Scatter(
+            x=series_detail.index, y=series_detail.values,
+            mode="lines", name=selected_ind_name,
+            line=dict(color="#00D4FF", width=2.5),
+            fill="tozeroy", fillcolor=hex_to_rgba("#00D4FF", 0.15)
+        ))
+        
+        # 임계값 가이드라인 추가
+        if meta["ticker"] == "^VIX":
+            fig_det.add_hline(y=30, line_dash="dash", line_color="#FF5555", opacity=0.8)
+        elif meta["ticker"] == "^MOVE":
+            fig_det.add_hline(y=140, line_dash="dash", line_color="#FF5555", opacity=0.8)
+        elif meta["ticker"] == "T10Y2Y":
+            fig_det.add_hline(y=0, line_dash="solid", line_color="#FFFFFF", opacity=0.4)
+            
+        fig_det.update_layout(**CHART_LAYOUT, height=450, title=f"{selected_ind_name} (최근 3년 추이)")
+        st.plotly_chart(fig_det, use_container_width=True, config={"displayModeBar": False})
 
-            prev_nl      = float(df_plot['Net_Liquidity'].iloc[-6])
-            nl_chg       = latest_nl - prev_nl
-            nl_chg_arrow = "▲" if nl_chg >= 0 else "▼"
-            nl_chg_color = "#22D98A" if nl_chg >= 0 else "#FF5555"
-            nl_signal    = "유동성 공급 확대" if nl_chg >= 0 else "유동성 흡수 진행"
-            nl_signal_ic = "📈" if nl_chg >= 0 else "📉"
-
-            # ── Plotly 차트
-            fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
-            fig_liq.add_trace(
-                go.Scatter(
-                    x=df_plot.index, y=df_plot['Net_Liquidity'],
-                    name="순유동성 (T)",
-                    line=dict(color='#00D4FF', width=2.5),
-                    fill='tozeroy',
-                    fillcolor='rgba(0,212,255,0.06)'
-                ),
-                secondary_y=False
-            )
-            fig_liq.add_trace(
-                go.Scatter(
-                    x=df_plot.index, y=df_plot['Close'],
-                    name="S&P 500",
-                    line=dict(color='#FF5555', width=1.8)
-                ),
-                secondary_y=True
-            )
-            fig_liq.update_layout(
-                **CHART_LAYOUT,
-                title_text="Net Liquidity vs S&P 500 (최근 1년)"
-            )
-            fig_liq.update_yaxes(title_text="순유동성 (T)", secondary_y=False, color="#00D4FF")
-            fig_liq.update_yaxes(title_text="S&P 500",     secondary_y=True,  color="#FF5555")
-            st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
-
-            # ── 공식 박스: $ → &#36; 로 전부 치환하여 Streamlit LaTeX 충돌 방지
-            walcl_str = "&#36;" + f"{latest_walcl:.2f} T"
-            rrp_str   = "&#36;" + f"{latest_rrp:.2f} T"
-            tga_str   = "&#36;" + f"{latest_tga:.2f} T"
-            nl_str    = "&#36;" + f"{latest_nl:.2f} T"
-            sp_str    = f"{latest_sp:,.0f}"
-            chg_str   = f"{nl_chg_arrow} {abs(nl_chg):.3f} T (주간 변화)"
-
-            html_box = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-<style>
-  * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{ background:transparent; font-family:'Noto Sans KR',sans-serif; padding:4px; }}
-  .box {{
-    background:#0C1420; border:1px solid #1E3050; border-radius:14px;
-    padding:20px; margin-bottom:8px;
-  }}
-  .box-title {{
-    font-size:0.95rem; font-weight:800; color:#00D4FF; margin-bottom:14px;
-  }}
-  .box-title span {{ font-size:0.75rem; color:#4A6888; font-weight:600; margin-left:10px; }}
-  .formula-box {{
-    font-family:'IBM Plex Mono',monospace; background:#060A12;
-    border:1px solid #1A2A3F; border-radius:10px; padding:16px;
-    margin-bottom:16px; line-height:2.4;
-  }}
-  .row {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
-  .row-divider {{ border-top:1px solid #1E3050; margin-top:10px; padding-top:12px; }}
-  .label-blue  {{ color:#3B82F6; font-size:1.0rem; font-weight:700; }}
-  .label-pink  {{ color:#EC4899; font-size:1.0rem; font-weight:700; }}
-  .label-amber {{ color:#F59E0B; font-size:1.0rem; font-weight:700; }}
-  .label-cyan  {{ color:#00D4FF; font-size:1.05rem; font-weight:800; }}
-  .label-gray  {{ color:#4A6888; font-size:0.8rem; }}
-  .op-minus {{ color:#FF5555; font-size:1.3rem; font-weight:900; }}
-  .op-equal {{ color:#22D98A; font-size:1.3rem; font-weight:900; }}
-  .val-chip {{
-    background:#1A2A3F; padding:4px 14px; border-radius:6px;
-    color:#FFFFFF; font-size:1.05rem; font-weight:700;
-  }}
-  .val-result {{
-    background:rgba(0,212,255,0.15); border:1px solid rgba(0,212,255,0.35);
-    padding:5px 18px; border-radius:8px;
-    color:#00D4FF; font-size:1.25rem; font-weight:900;
-  }}
-  .chg-badge {{ font-size:0.82rem; font-weight:700; color:{nl_chg_color}; }}
-  .metrics {{
-    display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;
-  }}
-  .metric-card {{
-    background:#080E1A; border:1px solid #1A2A3F; border-radius:10px; padding:14px;
-  }}
-  .metric-label {{
-    font-size:0.72rem; font-weight:700; color:#6B8EAE;
-    letter-spacing:.08em; margin-bottom:6px; text-transform:uppercase;
-  }}
-  .metric-val-sp {{
-    font-family:'IBM Plex Mono',monospace; font-size:1.3rem; font-weight:700; color:#FF5555;
-  }}
-  .metric-val-signal {{
-    font-family:'IBM Plex Mono',monospace; font-size:0.95rem;
-    font-weight:700; color:{nl_chg_color};
-  }}
-  .footnote {{ font-size:0.78rem; color:#4A6888; line-height:1.7; }}
-  .footnote b.up {{ color:#00D4FF; }}
-  .footnote b.dn {{ color:#FF5555; }}
-</style>
-</head>
-<body>
-<div class="box">
-
-  <div class="box-title">
-    📌 Net Liquidity 실시간 계산
-    <span>기준일: {latest_date}</span>
-  </div>
-
-  <div class="formula-box">
-
-    <div class="row">
-      <span class="label-blue">연준 총자산</span>
-      <span class="label-gray">(WALCL)</span>
-      <span class="val-chip">{walcl_str}</span>
-    </div>
-
-    <div class="row">
-      <span class="op-minus">−</span>
-      <span class="label-pink">역레포 (RRP)</span>
-      <span class="label-gray">(RRPONTSYD)</span>
-      <span class="val-chip">{rrp_str}</span>
-    </div>
-
-    <div class="row">
-      <span class="op-minus">−</span>
-      <span class="label-amber">재무부 계좌 (TGA)</span>
-      <span class="label-gray">(WTREGEN)</span>
-      <span class="val-chip">{tga_str}</span>
-    </div>
-
-    <div class="row row-divider">
-      <span class="op-equal">=</span>
-      <span class="label-cyan">순유동성 (Net Liquidity)</span>
-      <span class="val-result">{nl_str}</span>
-      <span class="chg-badge">{chg_str}</span>
-    </div>
-
-  </div>
-
-  <div class="metrics">
-    <div class="metric-card">
-      <div class="metric-label">S&P 500 최근 종가</div>
-      <div class="metric-val-sp">{sp_str}</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-label">유동성 신호</div>
-      <div class="metric-val-signal">{nl_signal_ic} {nl_signal}</div>
-    </div>
-  </div>
-
-  <div class="footnote">
-    순유동성이 증가하면 시장에 돈이 풀려 <b class="up">주가 상승</b> 압력,
-    감소하면 유동성 회수로 <b class="dn">주가 조정</b> 가능성이 높아집니다.
-  </div>
-
-</div>
-</body>
-</html>
-"""
-            components.html(html_box, height=520, scrolling=False)
-
-        else:
-            st.warning("데이터 병합 포인트가 부족합니다. 잠시 후 다시 시도해 주세요.")
-
-    except Exception as e:
-        st.error(f"유동성 섹션 오류: {str(e)}")
-
-else:
-    st.markdown("""
-<div style="background:#1A0E0E; border:1px solid #8B3A3A; border-radius:10px;
-            padding:16px; margin-bottom:16px;">
-  <div style="font-size:0.9rem; font-weight:700; color:#FF6B6B; margin-bottom:6px;">
-    데이터 로딩 실패 — 항목별 상태
-  </div>
-  <div style="font-size:0.82rem; color:#CC9999; line-height:1.6;">
-    FRED API 또는 인터넷 연결 상태를 확인하세요.
-  </div>
-</div>""", unsafe_allow_html=True)
-
-    dc1, dc2, dc3, dc4 = st.columns(4)
-    status_data = [
-        ("WALCL",     _walcl is not None and len(_walcl) > 1),
-        ("RRPONTSYD", _rrp   is not None and len(_rrp)   > 1),
-        ("WTREGEN",   _tga   is not None and len(_tga)   > 1),
-        ("S&P 500",   _sp500_ok),
-    ]
-    for col, (name, status) in zip([dc1, dc2, dc3, dc4], status_data):
-        with col:
-            ok_color = "#22D98A" if status else "#FF5555"
-            ok_text  = "READY"   if status else "FAILED"
-            st.markdown(f"""
-<div style="background:#0C1420; border:2px solid {ok_color}; border-radius:8px;
-            padding:14px; text-align:center;">
-  <div style="font-size:0.75rem; font-weight:700; color:#6B8EAE; margin-bottom:6px;">
-    {name}
-  </div>
-  <div style="font-family:'IBM Plex Mono',monospace; font-size:1.1rem;
-              font-weight:800; color:{ok_color};">
-    {ok_text}
-  </div>
-</div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 24px; margin-bottom: 30px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <div style="color: #6B8EAE; font-size: 0.85rem; font-weight: 700; margin-bottom: 5px;">현재 수치</div>
+                    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 2.2rem; font-weight: 700; color: #FFFFFF;">
+                        {cur_val:,.2f}<span style="font-size: 1rem; color: #6B8EAE;">{unit_str}</span>
+                    </div>
+                </div>
+                <div>
+                    <div style="color: #6B8EAE; font-size: 0.85rem; font-weight: 700; margin-bottom: 5px;">전일 대비 변동</div>
+                    <div style="font-family: 'IBM Plex Mono', monospace; font-size: 1.3rem; font-weight: 700; color: {'#22D98A' if chg >= 0 else '#FF5555'};">
+                        {'▲' if chg >= 0 else '▼'} {abs(chg):,.2f} ({abs(chg_pct):.2f}%)
+                    </div>
+                </div>
+                <div style="flex-grow: 1;"></div>
+                <div style="background: #060A12; border: 1px solid {status_color}55; padding: 12px 24px; border-radius: 8px; text-align: center;">
+                    <div style="color: #6B8EAE; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px;">AI 진단 상태</div>
+                    <div style="color: {status_color}; font-size: 1.1rem; font-weight: 800;">{status_text}</div>
+                </div>
+            </div>
+            <div style="border-top: 1px solid #1A2A3F; padding-top: 18px;">
+                <div style="color: #00D4FF; font-weight: 800; margin-bottom: 8px; font-size: 0.95rem;">📌 지표 설명 및 시사점</div>
+                <div style="color: #fef08a; font-size: 0.9rem; line-height: 1.6; font-weight: 500;">{meta['desc']}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.warning("선택한 지표의 상세 데이터를 불러올 수 없습니다.")
 
 
 # ═══════════════════════════════════════════════════════════
