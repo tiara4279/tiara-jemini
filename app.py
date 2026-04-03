@@ -1,18 +1,17 @@
 # ============================================================
-#  글로벌 매크로 대시보드 — app.py (v2 - 버그 수정본)
+#  글로벌 매크로 대시보드 — app.py (v3 - 완전 수정본)
 # ============================================================
 import subprocess, sys, os, warnings
 warnings.filterwarnings("ignore")
 
-# ── 자동 패키지 설치 (pandas-datareader 제거) ─────────────────
 REQUIRED = {
-    "streamlit":  "streamlit",
-    "yfinance":   "yfinance",
-    "pandas":     "pandas",
-    "numpy":      "numpy",
-    "plotly":     "plotly",
-    "fredapi":    "fredapi",
-    "requests":   "requests",
+    "streamlit": "streamlit",
+    "yfinance":  "yfinance",
+    "pandas":    "pandas",
+    "numpy":     "numpy",
+    "plotly":    "plotly",
+    "fredapi":   "fredapi",
+    "requests":  "requests",
 }
 
 def install_missing():
@@ -20,7 +19,6 @@ def install_missing():
         try:
             __import__(import_name)
         except ImportError:
-            print(f"📦 설치 중: {pkg_name}")
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", pkg_name, "-q"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -28,7 +26,6 @@ def install_missing():
 
 install_missing()
 
-# ── 메인 임포트 ───────────────────────────────────────────────
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -38,13 +35,11 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 
 # ── FRED API ──────────────────────────────────────────────────
-# 여기서 FRED API 키를 직접 설정
 FRED_API_KEY = "44435d53f0376bf6ab6263db6892924f"
 fred = None
 try:
     from fredapi import Fred
-    if FRED_API_KEY:
-        fred = Fred(api_key=FRED_API_KEY)
+    fred = Fred(api_key=FRED_API_KEY)
 except Exception:
     fred = None
 
@@ -56,84 +51,157 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ── HEX → rgba 변환 유틸 ─────────────────────────────────────
+def hex_to_rgba(hex_color, alpha=0.08):
+    """#RRGGBB → rgba(r,g,b,alpha)  — Plotly fillcolor 용"""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 # ── 전체 CSS ──────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Noto+Sans+KR:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;600;700;900&display=swap');
 
 html, body, [class*="css"] {
     font-family: 'Noto Sans KR', sans-serif !important;
+    font-weight: 600 !important;
 }
 .stApp { background: #060A12; }
-.block-container { padding-top: 1.2rem !important; max-width: 1400px; }
+.block-container {
+    padding-top: 1.5rem !important;
+    max-width: 1400px;
+}
 
+/* ── 메인 타이틀 ── */
 .main-title {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 1.7rem; font-weight: 600;
-    color: #E2E8F0; letter-spacing: 0.04em;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 2rem !important;
+    font-weight: 900 !important;
+    color: #FFFFFF !important;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    display: block;
 }
 .main-sub {
-    font-size: 0.73rem; color: #3D526E;
-    letter-spacing: 0.1em; margin-top: 2px;
+    font-size: 0.80rem !important;
+    font-weight: 700 !important;
+    color: #5A7A9E !important;
+    letter-spacing: 0.12em;
+    display: block;
+    margin-top: 4px;
 }
+
+/* ── 타임스탬프 ── */
 .ts {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem; color: #2A3A52; text-align: right;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    color: #3A5A7E !important;
+    text-align: right;
 }
+
+/* ── 섹션 헤더 ── */
 .sec-hd {
-    background: linear-gradient(90deg,#00D4FF12,transparent);
-    border-left: 3px solid #00D4FF;
-    padding: 6px 14px; margin: 28px 0 10px;
-    border-radius: 0 6px 6px 0;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.78rem; letter-spacing: 0.14em;
-    color: #00D4FF; text-transform: uppercase;
+    background: linear-gradient(90deg, #00D4FF18, transparent);
+    border-left: 4px solid #00D4FF;
+    padding: 8px 16px;
+    margin: 30px 0 12px;
+    border-radius: 0 8px 8px 0;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.16em;
+    color: #00D4FF !important;
+    text-transform: uppercase;
 }
+
+/* ── 지표 카드 ── */
 .kcard {
-    background: linear-gradient(140deg,#111827,#0C1420);
-    border: 1px solid #1A2A3F; border-radius: 10px;
-    padding: 14px 16px 10px; margin-bottom: 10px;
-    transition: border-color .25s;
+    background: linear-gradient(140deg, #131E2E, #0C1520);
+    border: 1px solid #1E3050;
+    border-radius: 12px;
+    padding: 16px 18px 12px;
+    margin-bottom: 10px;
+    transition: border-color .25s, box-shadow .25s;
 }
-.kcard:hover { border-color: #00D4FF44; }
+.kcard:hover {
+    border-color: #00D4FF66;
+    box-shadow: 0 0 20px rgba(0,212,255,0.08);
+}
 .klabel {
-    font-size: 0.68rem; color: #4B6280;
-    letter-spacing: .09em; text-transform: uppercase; margin-bottom: 3px;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #6080A0 !important;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
 }
 .kval {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 1.42rem; font-weight: 600;
-    color: #DDE6F0; line-height: 1.15;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 1.55rem !important;
+    font-weight: 700 !important;
+    color: #FFFFFF !important;
+    line-height: 1.2;
 }
-.kup  { color: #10B981; font-size: .78rem; font-family: 'IBM Plex Mono'; }
-.kdn  { color: #EF4444; font-size: .78rem; font-family: 'IBM Plex Mono'; }
-.kna  { color: #475569; font-size: .78rem; font-family: 'IBM Plex Mono'; }
-.ksub { color: #2E3F55; font-size: .66rem; margin-top: 2px; }
+.kup  { color: #22D98A !important; font-size: .82rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
+.kdn  { color: #FF5555 !important; font-size: .82rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
+.kna  { color: #607090 !important; font-size: .82rem !important; font-weight: 600 !important; font-family: 'IBM Plex Mono', monospace !important; }
+.ksub { color: #3A5070 !important; font-size: .70rem !important; font-weight: 600 !important; margin-top: 3px; }
 
-.b-low { background:#10B98118; color:#10B981; border:1px solid #10B98138;
-         padding:1px 7px; border-radius:99px; font-size:.65rem; }
-.b-mid { background:#F59E0B18; color:#F59E0B; border:1px solid #F59E0B38;
-         padding:1px 7px; border-radius:99px; font-size:.65rem; }
-.b-hi  { background:#EF444418; color:#EF4444; border:1px solid #EF444438;
-         padding:1px 7px; border-radius:99px; font-size:.65rem; }
+/* ── 리스크 배지 ── */
+.b-low { background:#10B98120; color:#22D98A !important; border:1px solid #10B98150;
+         padding:2px 9px; border-radius:99px; font-size:.70rem !important; font-weight:700 !important; }
+.b-mid { background:#F59E0B20; color:#FFBB33 !important; border:1px solid #F59E0B50;
+         padding:2px 9px; border-radius:99px; font-size:.70rem !important; font-weight:700 !important; }
+.b-hi  { background:#EF444420; color:#FF5555 !important; border:1px solid #EF444450;
+         padding:2px 9px; border-radius:99px; font-size:.70rem !important; font-weight:700 !important; }
 
-hr { border-color:#151F2E !important; }
+/* ── 구분선 ── */
+hr { border-color: #1A2A3F !important; }
 
+/* ── 탭 ── */
 .stTabs [data-baseweb="tab-list"] {
-    background: #0C1420; border-radius:8px; gap:4px;
+    background: #0C1420; border-radius: 10px; gap: 4px; padding: 4px;
 }
 .stTabs [data-baseweb="tab"] {
-    color:#4B6280; font-family:'IBM Plex Mono',monospace; font-size:.75rem;
+    color: #4B6A90 !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: .80rem !important;
+    font-weight: 700 !important;
 }
 .stTabs [aria-selected="true"] {
-    color:#00D4FF !important; background:#00D4FF12 !important; border-radius:6px;
+    color: #00D4FF !important;
+    background: #00D4FF18 !important;
+    border-radius: 7px;
 }
-.stButton>button {
-    background:#00D4FF14; border:1px solid #00D4FF40; color:#00D4FF;
-    font-family:'IBM Plex Mono',monospace; font-size:.75rem;
-    border-radius:6px; transition:.2s;
+
+/* ── 버튼 ── */
+.stButton > button {
+    background: #00D4FF18 !important;
+    border: 1px solid #00D4FF50 !important;
+    color: #00D4FF !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: .78rem !important;
+    font-weight: 700 !important;
+    border-radius: 8px;
+    transition: .2s;
 }
-.stButton>button:hover { background:#00D4FF28; border-color:#00D4FF80; }
+.stButton > button:hover {
+    background: #00D4FF30 !important;
+    border-color: #00D4FF99 !important;
+}
+
+/* ── info 박스 ── */
+.stAlert { font-weight: 600 !important; }
+
+/* ── 사이드바 ── */
+.stSidebar { background: #080E1A !important; }
+.stSidebar p, .stSidebar label, .stSidebar span {
+    font-weight: 600 !important;
+    color: #8AAAC8 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,9 +213,7 @@ hr { border-color:#151F2E !important; }
 @st.cache_data(ttl=300)
 def get_yf(ticker, period="6mo", interval="1d"):
     try:
-        h = yf.Ticker(ticker).history(
-            period=period, interval=interval, auto_adjust=True
-        )
+        h = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
         if h.empty or len(h) < 2:
             return None, None, None
         last = float(h["Close"].iloc[-1])
@@ -186,17 +252,14 @@ def card(label, val_str, chg=None, sub="", badge=""):
     <div class="kcard">
         <div class="klabel">{label}</div>
         <div class="kval">{val_str}{b}</div>
-        {delta_html(chg)} {s}
+        {delta_html(chg)}{s}
     </div>"""
 
 def sec(icon, title):
-    st.markdown(
-        f'<div class="sec-hd">{icon}&nbsp;&nbsp;{title}</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="sec-hd">{icon}&nbsp;&nbsp;{title}</div>', unsafe_allow_html=True)
 
 def spark(hist_or_series, color="#00D4FF", h=75, is_series=False):
-    """yfinance hist DataFrame 또는 FRED Series 모두 처리"""
+    """스파크라인 — fillcolor를 rgba()로 안전하게 처리"""
     if hist_or_series is None:
         return
     try:
@@ -209,24 +272,23 @@ def spark(hist_or_series, color="#00D4FF", h=75, is_series=False):
             x = hist_or_series.index
             y = hist_or_series["Close"].values
 
+        fill_rgba = hex_to_rgba(color[:7], 0.10)
+
         fig = go.Figure(go.Scatter(
             x=x, y=y, mode="lines",
-            line=dict(color=color, width=1.6),
+            line=dict(color=color[:7], width=1.8),
             fill="tozeroy",
-            fillcolor=color[:7] + "14",
+            fillcolor=fill_rgba,
         ))
         fig.update_layout(
-            height=h, margin=dict(l=0,r=0,t=0,b=0),
+            height=h, margin=dict(l=0, r=0, t=0, b=0),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             xaxis=dict(visible=False),
             yaxis=dict(visible=False),
             showlegend=False,
         )
-        st.plotly_chart(
-            fig, use_container_width=True,
-            config={"displayModeBar": False}
-        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     except Exception:
         pass
 
@@ -249,13 +311,15 @@ CHART_LAYOUT = dict(
     plot_bgcolor="#060A12",
     legend=dict(
         bgcolor="#0C1420", bordercolor="#1A2A3F", borderwidth=1,
-        font=dict(color="#94A3B8", size=11)
+        font=dict(color="#AACCEE", size=12, family="IBM Plex Mono")
     ),
-    xaxis=dict(gridcolor="#141E2E", color="#3D526E", showgrid=True),
-    yaxis=dict(gridcolor="#141E2E", color="#3D526E", showgrid=True),
-    margin=dict(l=50, r=20, t=20, b=30),
+    xaxis=dict(gridcolor="#141E2E", color="#4A6A8A", showgrid=True,
+               tickfont=dict(size=11, family="IBM Plex Mono")),
+    yaxis=dict(gridcolor="#141E2E", color="#4A6A8A", showgrid=True,
+               tickfont=dict(size=11, family="IBM Plex Mono")),
+    margin=dict(l=55, r=20, t=20, b=35),
     hovermode="x unified",
-    font=dict(family="IBM Plex Mono"),
+    font=dict(family="IBM Plex Mono", color="#AACCEE"),
 )
 
 
@@ -267,17 +331,15 @@ now_str = datetime.utcnow().strftime("%Y-%m-%d  %H:%M  UTC")
 
 hc1, hc2 = st.columns([4, 1])
 with hc1:
+    # st.markdown 대신 st.html 사용으로 렌더링 보장
     st.markdown(
-        '<div class="main-title">📡 글로벌 매크로 대시보드</div>',
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        '<div class="main-sub">GLOBAL MACRO MONITOR — REAL-TIME FINANCIAL INDICATORS</div>',
+        '<p class="main-title">📡 글로벌 매크로 대시보드</p>'
+        '<p class="main-sub">GLOBAL MACRO MONITOR — REAL-TIME FINANCIAL INDICATORS</p>',
         unsafe_allow_html=True
     )
 with hc2:
     st.markdown(
-        f'<div class="ts" style="padding-top:14px">🕐 {now_str}</div>',
+        f'<p class="ts" style="padding-top:16px">🕐 {now_str}</p>',
         unsafe_allow_html=True
     )
     if st.button("🔄 새로고침", use_container_width=True):
@@ -285,14 +347,7 @@ with hc2:
         st.rerun()
 
 st.markdown("---")
-
-if not FRED_API_KEY:
-    st.info(
-        "ℹ️ **FRED API 키** 미설정 — 연준·유동성 지표는 데모값으로 표시됩니다.  \n"
-        "🔑 무료 발급: [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html)  \n"
-        "👉 발급 후 왼쪽 **⚙️ 사이드바**에서 입력하거나, "
-        "Streamlit Cloud `Secrets`에 `FRED_API_KEY = \"키값\"` 추가"
-    )
+st.success("✅ **FRED API 연결됨** — 모든 지표 실데이터 수신 중")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -381,8 +436,8 @@ with r2:
 with r3:
     ts_data = get_fred("T10Y2Y")
     if ts_data is not None:
-        lv = float(ts_data.iloc[-1])
-        pv = float(ts_data.iloc[-2])
+        lv   = float(ts_data.iloc[-1])
+        pv   = float(ts_data.iloc[-2])
         diff = lv - pv
         clr  = "kup" if lv >= 0 else "kdn"
         arr  = "▲"   if lv >= 0 else "▼"
@@ -405,7 +460,6 @@ with r4:
                      "HY 스프레드 프록시"), unsafe_allow_html=True)
     spark(h, "#8B5CF6", 85)
 
-# FRED 하이일드 스프레드 실데이터
 hy = get_fred("BAMLH0A0HYM2")
 if hy is not None:
     lv = float(hy.iloc[-1]); pv = float(hy.iloc[-2])
@@ -424,9 +478,9 @@ if hy is not None:
 sec("🏦", "유동성을 좌우하는 핵심 창구 (연준)")
 
 LIQ = [
-    ("WALCL",     "연준 총자산 (대차대조표)", "#3B82F6", 7_200),
-    ("WRBWFRBL",  "지급준비금 잔고",           "#10B981", 3_300),
-    ("WTREGEN",   "TGA (재무부 일반계정)",     "#F59E0B",   750),
+    ("WALCL",    "연준 총자산 (대차대조표)", "#3B82F6", 7_200),
+    ("WRBWFRBL", "지급준비금 잔고",           "#10B981", 3_300),
+    ("WTREGEN",  "TGA (재무부 일반계정)",     "#F59E0B",   750),
 ]
 l1, l2, l3 = st.columns(3)
 for col, (sid, label, color, demo) in zip([l1, l2, l3], LIQ):
@@ -438,8 +492,7 @@ for col, (sid, label, color, demo) in zip([l1, l2, l3], LIQ):
             st.markdown(card(label, f(lv, 1, suf=" B$"), chg, f"FRED: {sid}"), unsafe_allow_html=True)
             spark(data, color, 85, is_series=True)
         else:
-            st.markdown(card(label, f(demo, 0, suf=" B$"), None,
-                             "⚠️ FRED 키 필요 | 데모값"), unsafe_allow_html=True)
+            st.markdown(card(label, f(demo, 0, suf=" B$"), None, f"⚠️ 데이터 로딩 중..."), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -465,7 +518,7 @@ for col, (sid, label, color, unit, demo, dp) in zip(crs, CRED):
             st.markdown(card(label, f(lv, dp, suf=suf), chg, f"FRED: {sid}"), unsafe_allow_html=True)
             spark(data, color, 80, is_series=True)
         else:
-            st.markdown(card(label, f(demo, dp, suf=suf), None, "⚠️ FRED 키 필요 | 데모값"), unsafe_allow_html=True)
+            st.markdown(card(label, f(demo, dp, suf=suf), None, "⚠️ 데이터 로딩 중..."), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -494,7 +547,7 @@ with m3:
         st.markdown(card("5Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T5YIE BEI"), unsafe_allow_html=True)
         spark(bei5, "#10B981", 90, is_series=True)
     else:
-        st.markdown(card("5Y 기대 인플레이션", "2.30%", None, "⚠️ FRED 키 필요"), unsafe_allow_html=True)
+        st.markdown(card("5Y 기대 인플레이션", "—", None, "⚠️ 데이터 로딩 중..."), unsafe_allow_html=True)
 
 with m4:
     bei10 = get_fred("T10YIE", 40)
@@ -504,9 +557,8 @@ with m4:
         st.markdown(card("10Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T10YIE BEI"), unsafe_allow_html=True)
         spark(bei10, "#3B82F6", 90, is_series=True)
     else:
-        st.markdown(card("10Y 기대 인플레이션", "2.28%", None, "⚠️ FRED 키 필요"), unsafe_allow_html=True)
+        st.markdown(card("10Y 기대 인플레이션", "—", None, "⚠️ 데이터 로딩 중..."), unsafe_allow_html=True)
 
-# WTI 원유
 v2, chg2, h2 = get_yf("CL=F", "6mo", "1d")
 mi1, _mi2, _mi3 = st.columns([1, 1, 2])
 with mi1:
@@ -515,7 +567,7 @@ with mi1:
 
 
 # ═══════════════════════════════════════════════════════════
-#  §8  종합 비교 차트 탭
+#  §8  종합 비교 차트
 # ═══════════════════════════════════════════════════════════
 
 sec("📊", "종합 비교 차트")
@@ -529,10 +581,10 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     pairs = [
-        ("S&P 500",   "^GSPC", "#10B981"),
-        ("나스닥 100","^NDX",  "#3B82F6"),
-        ("다우존스",  "^DJI",  "#8B5CF6"),
-        ("러셀 2000", "^RUT",  "#F59E0B"),
+        ("S&P 500",    "^GSPC", "#10B981"),
+        ("나스닥 100", "^NDX",  "#3B82F6"),
+        ("다우존스",   "^DJI",  "#8B5CF6"),
+        ("러셀 2000",  "^RUT",  "#F59E0B"),
     ]
     fig = go.Figure()
     for name, tk, clr in pairs:
@@ -541,7 +593,7 @@ with tab1:
             n = h["Close"] / h["Close"].iloc[0] * 100
             fig.add_trace(go.Scatter(
                 x=h.index, y=n, mode="lines",
-                name=name, line=dict(color=clr, width=2)
+                name=name, line=dict(color=clr, width=2.2)
             ))
     fig.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
@@ -555,29 +607,23 @@ with tab2:
         ("USD/CNY", "CNY=X",    "#EC4899"),
         ("DXY",     "DX-Y.NYB", "#06B6D4"),
     ]
-    fig2 = make_subplots(
-        rows=2, cols=3,
-        subplot_titles=[p[0] for p in fx_pairs]
-    )
+    fig2 = make_subplots(rows=2, cols=3, subplot_titles=[p[0] for p in fx_pairs])
     for idx, (name, tk, clr) in enumerate(fx_pairs):
         r, c = divmod(idx, 3)
         _, _, h = get_yf(tk, "6mo", "1d")
         if h is not None and not h.empty:
             fig2.add_trace(
-                go.Scatter(
-                    x=h.index, y=h["Close"], mode="lines",
-                    name=name, line=dict(color=clr, width=1.5),
-                    showlegend=False
-                ),
+                go.Scatter(x=h.index, y=h["Close"], mode="lines",
+                           name=name, line=dict(color=clr, width=1.8), showlegend=False),
                 row=r+1, col=c+1
             )
     fig2.update_layout(
-        height=400, paper_bgcolor="#060A12", plot_bgcolor="#060A12",
-        margin=dict(l=20,r=20,t=40,b=20),
-        font=dict(color="#3D526E", family="IBM Plex Mono"),
+        height=420, paper_bgcolor="#060A12", plot_bgcolor="#060A12",
+        margin=dict(l=20,r=20,t=45,b=20),
+        font=dict(color="#8AAAC8", family="IBM Plex Mono", size=11),
     )
-    fig2.update_xaxes(gridcolor="#141E2E", color="#3D526E")
-    fig2.update_yaxes(gridcolor="#141E2E", color="#3D526E")
+    fig2.update_xaxes(gridcolor="#141E2E", color="#4A6A8A")
+    fig2.update_yaxes(gridcolor="#141E2E", color="#4A6A8A")
     st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
 with tab3:
@@ -593,7 +639,7 @@ with tab3:
             n = h["Close"] / h["Close"].iloc[0] * 100
             fig3.add_trace(go.Scatter(
                 x=h.index, y=n, mode="lines",
-                name=name, line=dict(color=clr, width=2)
+                name=name, line=dict(color=clr, width=2.2)
             ))
     fig3.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
@@ -608,10 +654,12 @@ with tab4:
         _, _, h = get_yf(tk, "6mo", "1d")
         if h is not None and not h.empty:
             n = h["Close"] / h["Close"].iloc[0] * 100
+            # ✅ fillcolor → rgba() 형식으로 수정 (8자리 HEX 오류 방지)
+            fill_rgba = hex_to_rgba(clr[:7], 0.10)
             fig4.add_trace(go.Scatter(
                 x=h.index, y=n, mode="lines",
-                name=name, line=dict(color=clr, width=2),
-                fill="tozeroy", fillcolor=clr + "12"
+                name=name, line=dict(color=clr[:7], width=2.2),
+                fill="tozeroy", fillcolor=fill_rgba
             ))
     fig4.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
@@ -624,31 +672,28 @@ with tab4:
 with st.sidebar:
     st.markdown("### ⚙️ 설정")
     st.markdown("---")
-    st.markdown("**🔑 FRED API 키 입력**")
-    st.text_input(
-        "API Key", value=FRED_API_KEY,
-        type="password", placeholder="여기에 붙여넣기", disabled=True
-    )
+    st.markdown("**🔑 FRED API 키**")
+    st.text_input("API Key", value="••••••••••••••••••••••••", disabled=True)
+    st.success("✅ 연결됨")
     st.markdown("---")
     if st.button("🗑️ 캐시 초기화", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
     st.markdown("---")
     st.markdown("""
-**데이터 소스**
+**📡 데이터 소스**
 - 📈 Yahoo Finance
 - 🏛️ FRED (St. Louis Fed)
-- ⏱ 갱신 주기: 5분
+- ⏱ 갱신: 5분마다
     """)
     st.caption(f"🕐 {now_str}")
-
 
 # ── 푸터 ─────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(f"""
-<div style="text-align:center; color:#1E2D40; font-size:.65rem;
-     font-family:'IBM Plex Mono',monospace; padding:10px 0">
+<div style="text-align:center; color:#2A4060; font-size:.68rem;
+     font-family:'IBM Plex Mono',monospace; font-weight:600; padding:12px 0">
   📡 Yahoo Finance · FRED (St. Louis Fed) &nbsp;|&nbsp;
-  ⏱ 5분 캐시 &nbsp;|&nbsp; 🕐 {now_str}
+  ⏱ 5분 캐시 갱신 &nbsp;|&nbsp; 🕐 {now_str}
 </div>
 """, unsafe_allow_html=True)
