@@ -8,6 +8,7 @@ from plotly.subplots import make_subplots
 import numpy as np
 import urllib.request
 import json
+import concurrent.futures
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
@@ -94,9 +95,9 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
-# --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
+# --- CNN Fear & Greed 데이터 실시간 로드 함수 (캐시 폭파용 이름 변경) ---
 @st.cache_data(ttl=3600*2)
-def fetch_real_fng():
+def fetch_cnn_fng():
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
         headers = {
@@ -106,15 +107,15 @@ def fetch_real_fng():
             "Origin": "https://edition.cnn.com",
         }
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=3) as response:
             data = json.loads(response.read().decode('utf-8'))
             return int(round(data['fear_and_greed']['score']))
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (연준 서버 차단 방지용 안전 다운로드 로직 적용) ---
+# --- 데이터 로드 함수 (무한 로딩 차단: 초고속 병렬 다운로드 & 타임아웃 3초 제한) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_data_stable():
+def fetch_data_ultra_fast():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
@@ -127,32 +128,30 @@ def fetch_data_stable():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 안전한 순차 다운로드 (HTTP 429 Too Many Requests 방어 로직)
-    fred_list = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/csv,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
-
-    for name, series_id in fred_series.items():
-        success = False
-        for attempt in range(3): # 통신 실패시 최대 3회 재시도
+    # [1] FRED 데이터 병렬 다운로드 (엄격한 타임아웃 적용하여 앱 멈춤 방지)
+    def download_fred(name, series_id):
+        headers = {"User-Agent": "Mozilla/5.0"}
+        for _ in range(2): # 무한 로딩 방지를 위해 최대 2회만 재시도
             try:
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=7) as response:
+                with urllib.request.urlopen(req, timeout=3) as response: # 타임아웃 3초로 엄격히 제한
                     data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
                     data = data[(data.index >= start) & (data.index <= end)]
                     data = data.rename(columns={series_id: name})
                     if not data.empty:
-                        fred_list.append(data)
-                        success = True
-                        break # 성공시 재시도 루프 탈출
+                        return data
             except Exception:
-                time.sleep(1) # 에러 발생시 1초 대기 후 재시도
-                
-        if success:
-            time.sleep(0.2) # 정상 수신 후 연준 서버 과부하 방지를 위해 0.2초 휴식
+                time.sleep(0.5)
+        return pd.DataFrame()
+
+    fred_list = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(download_fred, name, sid) for name, sid in fred_series.items()]
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            if not res.empty:
+                fred_list.append(res)
                 
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
@@ -167,11 +166,11 @@ def fetch_data_stable():
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
     if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
 
-    # [2] 야후 파이낸스 데이터 다운로드
+    # [2] 야후 파이낸스 데이터 다운로드 (threads=False로 설정하여 yfinance 내부 병목 현상 차단)
     tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
     df_yf = pd.DataFrame()
     try:
-        yf_data = yf.download(tickers, start=start, end=end, progress=False)
+        yf_data = yf.download(tickers, start=start, end=end, progress=False, threads=False)
         if isinstance(yf_data.columns, pd.MultiIndex):
             df_yf = yf_data['Close'] if 'Close' in yf_data.columns.levels[0] else yf_data
         else:
@@ -232,12 +231,12 @@ def fetch_data_stable():
     
     return df_merged, df_raw
 
-with st.spinner('안전한 방식으로 데이터를 수집하고 있습니다. 잠시만 기다려주세요 (약 3~5초 소요)...'):
-    df, df_raw = fetch_data_stable()
+with st.spinner('초고속 병렬 방식으로 데이터를 로드 중입니다 (약 3~5초 소요)...'):
+    df, df_raw = fetch_data_ultra_fast()
 
 # 데이터 수집 완전 실패에 대한 방어 로직
 if df.empty or len(df.columns) < 5:
-    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요.")
+    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 일시적으로 지연되고 있습니다. 잠시 후 새로고침을 해주세요.")
     st.stop()
 
 # --- 다크 모드용 형광색 테마 설정 ---
@@ -793,7 +792,7 @@ if all(c in df_raw.columns for c in req_cols):
     v_fsi = get_last_two(df_raw['FSI'])
     
     # 공포탐욕지수 (CNN 실제 데이터 호출, 실패시 SP500+VIX+HY 역산 초정밀 추정치로 Fallback)
-    real_fng = fetch_real_fng()
+    real_fng = fetch_cnn_fng()
     if real_fng is not None:
         fng_score = real_fng
         fng_desc = "CNN Fear & Greed"
@@ -822,6 +821,7 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
+    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
