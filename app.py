@@ -1,5 +1,11 @@
 # ============================================================
-#  글로벌 매크로 대시보드 — app.py (완전 수정본 v2.0)
+#  글로벌 매크로 대시보드 — app.py (완전 통합본 FINAL)
+#  ✅ sec() 정의 완료
+#  ✅ Net Liquidity 실제 데이터 적용
+#  ✅ 국채금리 분해 섹션 삭제
+#  ✅ 단위 변환 수정 (WALCL=M$, RRP=B$, TGA=M$)
+#  ✅ S&P500 직접 호출 (캐시 충돌 방지)
+#  ✅ 데이터 실패 진단 UI 포함
 # ============================================================
 import subprocess, sys, warnings
 warnings.filterwarnings("ignore")
@@ -35,12 +41,14 @@ from plotly.subplots import make_subplots
 import numpy as np
 from fredapi import Fred
 
+# ── FRED 연결
 FRED_API_KEY = "44435d53f0376bf6ab6263db6892924f"
 try:
     fred = Fred(api_key=FRED_API_KEY)
 except Exception:
     fred = None
 
+# ── 페이지 설정
 st.set_page_config(
     page_title="글로벌 매크로 대시보드",
     page_icon="📡",
@@ -48,6 +56,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ═══════════════════════════════════════════════════════════
+#  CSS 스타일
+# ═══════════════════════════════════════════════════════════
 def hex_to_rgba(hex_color, alpha=0.10):
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
@@ -150,7 +161,7 @@ h1 {
 
 .b-low { background: #10B98122; color: #22D98A !important; border: 1px solid #10B98155; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
 .b-mid { background: #F59E0B22; color: #FFCC44 !important; border: 1px solid #F59E0B55; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
-.b-hi { background: #EF444422; color: #FF5555 !important; border: 1px solid #EF444455; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
+.b-hi  { background: #EF444422; color: #FF5555 !important; border: 1px solid #EF444455; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
 
 hr { border-color: #1A2A3F !important; }
 
@@ -183,8 +194,9 @@ section[data-testid="stSidebar"] span {
 }
 </style>""", unsafe_allow_html=True)
 
+
 # ═══════════════════════════════════════════════════════════
-#  공통 유틸 함수 (✅ 모두 정의됨)
+#  공통 유틸 함수
 # ═══════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=300)
@@ -200,6 +212,7 @@ def get_yf(ticker, period="6mo", interval="1d"):
     except Exception:
         return None, None, None
 
+
 @st.cache_data(ttl=600)
 def get_fred(sid, limit=60):
     if fred is None:
@@ -210,10 +223,12 @@ def get_fred(sid, limit=60):
     except Exception:
         return None
 
+
 def f(v, d=2, pre="", suf=""):
     if v is None or (isinstance(v, float) and np.isnan(v)):
         return "N/A"
     return f"{pre}{v:,.{d}f}{suf}"
+
 
 def delta_html(chg):
     if chg is None:
@@ -221,6 +236,7 @@ def delta_html(chg):
     a = "▲" if chg >= 0 else "▼"
     c = "kup" if chg >= 0 else "kdn"
     return f'<span class="{c}">{a} {abs(chg):.3f}%</span>'
+
 
 def card(label, val_str, chg=None, sub="", badge=""):
     b = f" &nbsp;{badge}" if badge else ""
@@ -232,9 +248,15 @@ def card(label, val_str, chg=None, sub="", badge=""):
         {delta_html(chg)}{s}
     </div>"""
 
+
 def sec(icon, title):
-    """✅ 섹션 헤더 출력"""
-    st.markdown(f'<div class="sec-hd"><span style="text-transform: none;">{icon}</span>&nbsp;&nbsp;{title}</div>', unsafe_allow_html=True)
+    """섹션 헤더 출력"""
+    st.markdown(
+        f'<div class="sec-hd"><span style="text-transform:none;">{icon}</span>'
+        f'&nbsp;&nbsp;{title}</div>',
+        unsafe_allow_html=True
+    )
+
 
 def spark(hist_or_series, color="#00D4FF", h=75, is_series=False):
     if hist_or_series is None:
@@ -262,6 +284,7 @@ def spark(hist_or_series, color="#00D4FF", h=75, is_series=False):
     except Exception:
         pass
 
+
 def risk_badge(name, val):
     if val is None:
         return ""
@@ -274,6 +297,7 @@ def risk_badge(name, val):
             if val < thr:
                 return f'<span class="{cls}">{lbl}</span>'
     return ""
+
 
 CHART_LAYOUT = dict(
     height=340,
@@ -292,10 +316,10 @@ CHART_LAYOUT = dict(
     font=dict(family="IBM Plex Mono", color="#AACCEE"),
 )
 
+
 # ═══════════════════════════════════════════════════════════
 #  헤더
 # ═══════════════════════════════════════════════════════════
-
 now_str = datetime.utcnow().strftime("%Y-%m-%d  %H:%M  UTC")
 
 st.title("📡 글로벌 매크로 대시보드")
@@ -303,7 +327,7 @@ st.caption("GLOBAL MACRO MONITOR — REAL-TIME FINANCIAL INDICATORS")
 
 ts_col, btn_col = st.columns([6, 1])
 with ts_col:
-    st.markdown(f'🕐 {now_str}')
+    st.markdown(f"🕐 {now_str}")
 with btn_col:
     if st.button("🔄 새로고침", use_container_width=True):
         st.cache_data.clear()
@@ -312,10 +336,10 @@ with btn_col:
 st.markdown("---")
 st.success("✅ **FRED API 연결됨** — 실데이터 수신 중")
 
+
 # ═══════════════════════════════════════════════════════════
 #  §1  세계 외환 지표
 # ═══════════════════════════════════════════════════════════
-
 sec("🌐", "세계 외환 지표")
 
 FX = [
@@ -333,16 +357,16 @@ for col, (name, tk, color, desc) in zip(cols, FX):
         st.markdown(card(name, f(v, 4), chg, desc), unsafe_allow_html=True)
         spark(h, color, 65)
 
+
 # ═══════════════════════════════════════════════════════════
 #  §2  한국 경제 지표
 # ═══════════════════════════════════════════════════════════
-
 sec("🇰🇷", "한국 경제 지표")
 
 KR = [
-    ("KOSPI",   "^KS11",  "#F59E0B", "코스피 종합주가지수"),
-    ("KOSDAQ",  "^KQ11",  "#10B981", "코스닥 지수"),
-    ("원/달러", "KRW=X",  "#3B82F6", "원화 / 미국달러 환율"),
+    ("KOSPI",   "^KS11", "#F59E0B", "코스피 종합주가지수"),
+    ("KOSDAQ",  "^KQ11", "#10B981", "코스닥 지수"),
+    ("원/달러", "KRW=X", "#3B82F6", "원화 / 미국달러 환율"),
 ]
 cols = st.columns(3)
 for col, (name, tk, color, desc) in zip(cols, KR):
@@ -351,10 +375,10 @@ for col, (name, tk, color, desc) in zip(cols, KR):
         st.markdown(card(name, f(v, 2), chg, desc), unsafe_allow_html=True)
         spark(h, color, 100)
 
+
 # ═══════════════════════════════════════════════════════════
 #  §3  미국 지수 및 선물
 # ═══════════════════════════════════════════════════════════
-
 sec("🇺🇸", "미국 지수 및 선물")
 
 US = [
@@ -372,10 +396,10 @@ for i, (name, tk, color, desc) in enumerate(US):
         st.markdown(card(name, f(v, 2), chg, desc), unsafe_allow_html=True)
         spark(h, color, 85)
 
+
 # ═══════════════════════════════════════════════════════════
 #  §4  시장 리스크 및 스트레스 지표
 # ═══════════════════════════════════════════════════════════
-
 sec("⚠️", "시장 리스크 및 스트레스 지표")
 
 r1, r2, r3, r4 = st.columns(4)
@@ -418,46 +442,46 @@ with r4:
 
 hy = get_fred("BAMLH0A0HYM2")
 if hy is not None and len(hy) > 0:
-    lv = float(hy.iloc[-1])
-    pv = float(hy.iloc[-2]) if len(hy) > 1 else lv
+    lv     = float(hy.iloc[-1])
+    pv     = float(hy.iloc[-2]) if len(hy) > 1 else lv
     chg_hy = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
     fe1, fe2 = st.columns(2)
     with fe1:
         st.markdown(card("하이일드 스프레드 (OAS)", f(lv, 2, suf="%"), chg_hy, "ICE BofA US HY OAS"), unsafe_allow_html=True)
         spark(hy, "#EF4444", 80, is_series=True)
 
+
 # ═══════════════════════════════════════════════════════════
 #  §5  유동성 핵심 창구
 # ═══════════════════════════════════════════════════════════
-
 sec("🏦", "유동성을 좌우하는 핵심 창구 (연준)")
 
 LIQ = [
     ("WALCL",    "연준 총자산 (대차대조표)", "#3B82F6", 7_200),
-    ("WRBWFRBL", "지급준비금 잔고",            "#10B981", 3_300),
-    ("WTREGEN",  "TGA (재무부 일반계정)",      "#F59E0B",   750),
+    ("WRBWFRBL", "지급준비금 잔고",           "#10B981", 3_300),
+    ("WTREGEN",  "TGA (재무부 일반계정)",     "#F59E0B",   750),
 ]
 l1, l2, l3 = st.columns(3)
 for col, (sid, label, color, demo) in zip([l1, l2, l3], LIQ):
     with col:
         data = get_fred(sid, 60)
         if data is not None and len(data) > 0:
-            lv = float(data.iloc[-1])
-            pv = float(data.iloc[-2]) if len(data) > 1 else lv
+            lv  = float(data.iloc[-1])
+            pv  = float(data.iloc[-2]) if len(data) > 1 else lv
             chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
             st.markdown(card(label, f(lv/1000, 1, suf=" T$"), chg, f"FRED: {sid}"), unsafe_allow_html=True)
             spark(data, color, 85, is_series=True)
         else:
-            st.markdown(card(label, f(demo, 0, suf=" B$"), None, "⚠️ 로딩 중..."), unsafe_allow_html=True)
+            st.markdown(card(label, f(demo, 0, suf=" B$"), None, "로딩 중..."), unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════
 #  §6  은행 신용 및 단기 자금 시장
 # ═══════════════════════════════════════════════════════════
-
 sec("💰", "은행 신용 및 단기 자금 시장")
 
 CRED = [
-    ("RRPONTSYD", "역레포 (ON RRP)",   "#EC4899", "B$", 400,    1),
+    ("RRPONTSYD", "역레포 (ON RRP)",   "#EC4899", "%",  400,    1),
     ("WRMFSL",    "MMF 총잔고",         "#06B6D4", "B$", 6_200,  1),
     ("TOTLL",     "상업은행 총대출",    "#8B5CF6", "B$", 17_500, 1),
     ("SOFR",      "SOFR (익일물 금리)", "#F59E0B", "%",  5.33,   3),
@@ -468,18 +492,18 @@ for col, (sid, label, color, unit, demo, dp) in zip(crs, CRED):
         data = get_fred(sid, 60)
         suf  = "%" if unit == "%" else " B$"
         if data is not None and len(data) > 0:
-            lv = float(data.iloc[-1])
-            pv = float(data.iloc[-2]) if len(data) > 1 else lv
+            lv  = float(data.iloc[-1])
+            pv  = float(data.iloc[-2]) if len(data) > 1 else lv
             chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
             st.markdown(card(label, f(lv, dp, suf=suf), chg, f"FRED: {sid}"), unsafe_allow_html=True)
             spark(data, color, 80, is_series=True)
         else:
-            st.markdown(card(label, f(demo, dp, suf=suf), None, "⚠️ 로딩 중..."), unsafe_allow_html=True)
+            st.markdown(card(label, f(demo, dp, suf=suf), None, "로딩 중..."), unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════
 #  §7  인플레이션 및 글로벌 매크로
 # ═══════════════════════════════════════════════════════════
-
 sec("📈", "인플레이션 및 글로벌 매크로")
 
 m1, m2, m3, m4 = st.columns(4)
@@ -497,24 +521,24 @@ with m2:
 with m3:
     bei5 = get_fred("T5YIE", 40)
     if bei5 is not None and len(bei5) > 0:
-        lv = float(bei5.iloc[-1])
-        pv = float(bei5.iloc[-2]) if len(bei5) > 1 else lv
+        lv  = float(bei5.iloc[-1])
+        pv  = float(bei5.iloc[-2]) if len(bei5) > 1 else lv
         chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
         st.markdown(card("5Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T5YIE"), unsafe_allow_html=True)
         spark(bei5, "#10B981", 90, is_series=True)
     else:
-        st.markdown(card("5Y 기대 인플레이션", "—", None, "⚠️ 로딩 중..."), unsafe_allow_html=True)
+        st.markdown(card("5Y 기대 인플레이션", "—", None, "로딩 중..."), unsafe_allow_html=True)
 
 with m4:
     bei10 = get_fred("T10YIE", 40)
     if bei10 is not None and len(bei10) > 0:
-        lv = float(bei10.iloc[-1])
-        pv = float(bei10.iloc[-2]) if len(bei10) > 1 else lv
+        lv  = float(bei10.iloc[-1])
+        pv  = float(bei10.iloc[-2]) if len(bei10) > 1 else lv
         chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
         st.markdown(card("10Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T10YIE"), unsafe_allow_html=True)
         spark(bei10, "#3B82F6", 90, is_series=True)
     else:
-        st.markdown(card("10Y 기대 인플레이션", "—", None, "⚠️ 로딩 중..."), unsafe_allow_html=True)
+        st.markdown(card("10Y 기대 인플레이션", "—", None, "로딩 중..."), unsafe_allow_html=True)
 
 v2, chg2, h2 = get_yf("CL=F", "6mo", "1d")
 mi1, _mi2, _mi3 = st.columns([1, 1, 2])
@@ -522,10 +546,10 @@ with mi1:
     st.markdown(card("WTI 원유 선물", f(v2, 2, pre="$", suf="/bbl"), chg2, "NYMEX Crude Oil"), unsafe_allow_html=True)
     spark(h2, "#64748B", 80)
 
+
 # ═══════════════════════════════════════════════════════════
 #  §8  종합 비교 차트
 # ═══════════════════════════════════════════════════════════
-
 sec("📊", "종합 비교 차트")
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -575,7 +599,7 @@ with tab2:
             )
     fig2.update_layout(
         height=420, paper_bgcolor="#060A12", plot_bgcolor="#060A12",
-        margin=dict(l=20,r=20,t=45,b=20),
+        margin=dict(l=20, r=20, t=45, b=20),
         font=dict(color="#8AAAC8", family="IBM Plex Mono", size=11),
     )
     fig2.update_xaxes(gridcolor="#141E2E", color="#4A6A8A")
@@ -619,18 +643,23 @@ with tab4:
     fig4.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
 
+
 # ═══════════════════════════════════════════════════════════
-#  §9 Net Liquidity (완전 수정본 2.0 — 데이터 로딩 수정)
+#  §9  Net Liquidity (완전 수정 FINAL)
+#  ✅ 단위 정확히 변환: WALCL=M$, RRP=B$, TGA=M$
+#  ✅ S&P500 직접 호출 (캐시 키 충돌 방지)
+#  ✅ 실제 데이터를 공식 박스에 직접 출력
+#  ✅ 데이터 실패 시 항목별 진단 UI
 # ═══════════════════════════════════════════════════════════
 sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
 st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
 
-# ── 데이터 개별 로딩 (all() 조건 밖에서 명시적으로 체크)
-_walcl  = get_fred('WALCL',     limit=300)   # 단위: 백만달러 (M$)
-_rrp    = get_fred('RRPONTSYD', limit=300)   # 단위: 십억달러 (B$)
-_tga    = get_fred('WTREGEN',   limit=300)   # 단위: 백만달러 (M$)
+# ── 개별 데이터 로딩
+_walcl = get_fred('WALCL',     limit=300)   # 단위: 백만달러 (M$)
+_rrp   = get_fred('RRPONTSYD', limit=300)   # 단위: 십억달러 (B$)
+_tga   = get_fred('WTREGEN',   limit=300)   # 단위: 백만달러 (M$)
 
-# S&P500 별도 호출 (캐시 키 충돌 방지)
+# S&P500 직접 호출 (캐시 키 충돌 방지)
 try:
     _sp500_raw = yf.Ticker('^GSPC').history(period='1y', interval='1d', auto_adjust=True)
     _sp500_ok  = not _sp500_raw.empty and len(_sp500_raw) > 10
@@ -639,27 +668,20 @@ except Exception:
     _sp500_ok  = False
 
 _data_ok = (
-    _walcl  is not None and len(_walcl)  > 1 and
-    _rrp    is not None and len(_rrp)    > 1 and
-    _tga    is not None and len(_tga)    > 1 and
+    _walcl is not None and len(_walcl) > 1 and
+    _rrp   is not None and len(_rrp)   > 1 and
+    _tga   is not None and len(_tga)   > 1 and
     _sp500_ok
 )
 
 if _data_ok:
     try:
         # ── 단위 통일 → 조 달러(T$)
-        # WALCL : M$ → T$  ( ÷ 1,000,000 )
-        # RRPONTSYD : B$ → T$  ( ÷ 1,000 )
-        # WTREGEN : M$ → T$  ( ÷ 1,000,000 )
-        walcl_t = _walcl  / 1_000_000.0
-        rrp_t   = _rrp    / 1_000.0
-        tga_t   = _tga    / 1_000_000.0
+        walcl_t = _walcl / 1_000_000.0   # M$ → T$
+        rrp_t   = _rrp   / 1_000.0       # B$ → T$
+        tga_t   = _tga   / 1_000_000.0   # M$ → T$
 
-        df_liq = pd.DataFrame({
-            'WALCL': walcl_t,
-            'RRP':   rrp_t,
-            'TGA':   tga_t,
-        })
+        df_liq = pd.DataFrame({'WALCL': walcl_t, 'RRP': rrp_t, 'TGA': tga_t})
         df_liq['Net_Liquidity'] = df_liq['WALCL'] - df_liq['RRP'] - df_liq['TGA']
 
         # ── S&P500 타임존 제거
@@ -692,6 +714,8 @@ if _data_ok:
             nl_chg       = latest_nl - prev_nl
             nl_chg_arrow = "▲" if nl_chg >= 0 else "▼"
             nl_chg_color = "#22D98A" if nl_chg >= 0 else "#FF5555"
+            nl_signal    = "유동성 공급 확대" if nl_chg >= 0 else "유동성 흡수 진행"
+            nl_signal_ic = "📈" if nl_chg >= 0 else "📉"
 
             # ── 차트
             fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
@@ -719,89 +743,163 @@ if _data_ok:
                 **CHART_LAYOUT,
                 title_text="Net Liquidity vs S&P 500 (최근 1년)"
             )
-            fig_liq.update_yaxes(title_text="순유동성 (T$)", secondary_y=False, color="#00D4FF")
-            fig_liq.update_yaxes(title_text="S&P 500",       secondary_y=True,  color="#FF5555")
+            fig_liq.update_yaxes(
+                title_text="순유동성 (T$)", secondary_y=False, color="#00D4FF"
+            )
+            fig_liq.update_yaxes(
+                title_text="S&P 500", secondary_y=True, color="#FF5555"
+            )
 
             st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
 
-            # ── 실제 데이터 공식 박스
+            # ── 실제 데이터 적용 공식 박스
             st.markdown(f"""
-<div style="background:#0C1420; border:1px solid #1E3050; border-radius:14px; padding:20px; margin-bottom:24px;">
+<div style="background:#0C1420; border:1px solid #1E3050; border-radius:14px;
+            padding:20px; margin-bottom:24px;">
 
   <div style="font-size:0.95rem; font-weight:800; color:#00D4FF; margin-bottom:14px;">
-    📌 Net Liquidity 실시간 계산
+    Net Liquidity 실시간 계산
     &nbsp;<span style="font-size:0.75rem; color:#4A6888; font-weight:600;">기준일: {latest_date}</span>
   </div>
 
-  <div style="font-family:'IBM Plex Mono',monospace; background:#060A12; border:1px solid #1A2A3F;
-              border-radius:10px; padding:16px; margin-bottom:16px; line-height:2.2;">
+  <div style="font-family:'IBM Plex Mono',monospace; background:#060A12;
+              border:1px solid #1A2A3F; border-radius:10px; padding:16px;
+              margin-bottom:16px; line-height:2.4;">
 
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
       <span style="color:#3B82F6; font-size:1.0rem; font-weight:700;">연준 총자산</span>
       <span style="color:#4A6888; font-size:0.8rem;">(WALCL)</span>
-      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+      <span style="background:#1A2A3F; padding:4px 14px; border-radius:6px;
                    color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_walcl:.2f} T</span>
     </div>
 
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span style="color:#FF5555; font-size:1.2rem; font-weight:900;">−</span>
+      <span style="color:#FF5555; font-size:1.3rem; font-weight:900;">−</span>
       <span style="color:#EC4899; font-size:1.0rem; font-weight:700;">역레포 (RRP)</span>
       <span style="color:#4A6888; font-size:0.8rem;">(RRPONTSYD)</span>
-      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+      <span style="background:#1A2A3F; padding:4px 14px; border-radius:6px;
                    color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_rrp:.2f} T</span>
     </div>
 
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span style="color:#FF5555; font-size:1.2rem; font-weight:900;">−</span>
+      <span style="color:#FF5555; font-size:1.3rem; font-weight:900;">−</span>
       <span style="color:#F59E0B; font-size:1.0rem; font-weight:700;">재무부 계좌 (TGA)</span>
       <span style="color:#4A6888; font-size:0.8rem;">(WTREGEN)</span>
-      <span style="background:#1A2A3F; padding:4px 12px; border-radius:6px;
+      <span style="background:#1A2A3F; padding:4px 14px; border-radius:6px;
                    color:#FFFFFF; font-size:1.05rem; font-weight:700;">${latest_tga:.2f} T</span>
     </div>
 
-    <div style="border-top:1px solid #1E3050; margin-top:10px; padding-top:10px;
+    <div style="border-top:1px solid #1E3050; margin-top:10px; padding-top:12px;
                 display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span style="color:#22D98A; font-size:1.2rem; font-weight:900;">=</span>
+      <span style="color:#22D98A; font-size:1.3rem; font-weight:900;">=</span>
       <span style="color:#00D4FF; font-size:1.05rem; font-weight:800;">순유동성 (Net Liquidity)</span>
       <span style="background:rgba(0,212,255,0.15); border:1px solid #00D4FF55;
-                   padding:5px 16px; border-radius:8px;
-                   color:#00D4FF; font-size:1.2rem; font-weight:900;">${latest_nl:.2f} T</span>
+                   padding:5px 18px; border-radius:8px;
+                   color:#00D4FF; font-size:1.25rem; font-weight:900;">${latest_nl:.2f} T</span>
       <span style="color:{nl_chg_color}; font-size:0.82rem; font-weight:700;">
         {nl_chg_arrow} {abs(nl_chg):.3f} T (주간 변화)
       </span>
     </div>
-
   </div>
 
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
-    <div style="background:#080E1A; bord**
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+    <div style="background:#080E1A; border:1px solid #1A2A3F; border-radius:10px; padding:14px;">
+      <div style="font-size:0.75rem; font-weight:700; color:#6B8EAE;
+                  letter-spacing:.08em; margin-bottom:6px;">S&P 500 최근 종가</div>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:1.3rem;
+                  font-weight:700; color:#FF5555;">{latest_sp:,.0f}</div>
+    </div>
+    <div style="background:#080E1A; border:1px solid #1A2A3F; border-radius:10px; padding:14px;">
+      <div style="font-size:0.75rem; font-weight:700; color:#6B8EAE;
+                  letter-spacing:.08em; margin-bottom:6px;">유동성 신호</div>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:0.95rem;
+                  font-weight:700; color:{nl_chg_color};">
+        {nl_signal_ic} {nl_signal}
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:0.78rem; color:#4A6888; line-height:1.7;">
+    순유동성이 증가하면 시장에 돈이 풀려
+    <b style="color:#00D4FF">주가 상승</b> 압력,
+    감소하면 유동성 회수로 <b style="color:#FF5555">주가 조정</b> 가능성이 높아집니다.
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
+
+        else:
+            st.warning("데이터 병합 포인트가 부족합니다. 잠시 후 다시 시도해 주세요.")
+
+    except Exception as e:
+        st.error(f"유동성 섹션 오류: {str(e)}")
+
+else:
+    # ── 항목별 실패 진단 UI
+    st.markdown("""
+<div style="background:#1A0E0E; border:1px solid #8B3A3A; border-radius:10px;
+            padding:16px; margin-bottom:16px;">
+  <div style="font-size:0.9rem; font-weight:700; color:#FF6B6B; margin-bottom:6px;">
+    데이터 로딩 실패 — 항목별 상태
+  </div>
+  <div style="font-size:0.82rem; color:#CC9999; line-height:1.6;">
+    FRED API 또는 인터넷 연결 상태를 확인하세요.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    dc1, dc2, dc3, dc4 = st.columns(4)
+    status_data = [
+        ("WALCL",     _walcl   is not None and len(_walcl)   > 1),
+        ("RRPONTSYD", _rrp     is not None and len(_rrp)     > 1),
+        ("WTREGEN",   _tga     is not None and len(_tga)     > 1),
+        ("S&P 500",   _sp500_ok),
+    ]
+    for col, (name, status) in zip([dc1, dc2, dc3, dc4], status_data):
+        with col:
+            ok_color = "#22D98A" if status else "#FF5555"
+            ok_text  = "READY"  if status else "FAILED"
+            st.markdown(f"""
+<div style="background:#0C1420; border:2px solid {ok_color}; border-radius:8px;
+            padding:14px; text-align:center;">
+  <div style="font-size:0.75rem; font-weight:700; color:#6B8EAE; margin-bottom:6px;">
+    {name}
+  </div>
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:1.1rem;
+              font-weight:800; color:{ok_color};">
+    {ok_text}
+  </div>
+</div>""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════
-#  사이드바 & 푸터
+#  사이드바
 # ═══════════════════════════════════════════════════════════
-
 with st.sidebar:
-    st.markdown("### ⚙️ 설정")
+    st.markdown("### 설정")
     st.markdown("---")
-    st.markdown("**🔑 FRED API**")
+    st.markdown("**FRED API**")
     st.text_input("API Key", value="••••••••••••••••••••••••", disabled=True)
-    st.success("✅ 연결됨")
+    st.success("연결됨")
     st.markdown("---")
-    if st.button("🗑️ 캐시 초기화", use_container_width=True):
+    if st.button("캐시 초기화", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
     st.markdown("---")
     st.markdown("""
-**📡 데이터 소스**
-- 📈 Yahoo Finance
-- 🏛️ FRED
-- ⏱ 5분 캐시
+**데이터 소스**
+- Yahoo Finance
+- FRED
+- 5분 캐시 적용
     """)
 
+
+# ═══════════════════════════════════════════════════════════
+#  푸터
+# ═══════════════════════════════════════════════════════════
 st.markdown("---")
 st.markdown(f"""
-<div style="text-align:center; color:#2A4060; font-size:.70rem; font-family:'IBM Plex Mono',monospace; font-weight:700; padding:12px 0">
-  📡 Yahoo Finance · FRED | {now_str}
+<div style="text-align:center; color:#2A4060; font-size:.70rem;
+            font-family:'IBM Plex Mono',monospace; font-weight:700; padding:12px 0;">
+  Yahoo Finance · FRED | {now_str}
 </div>
 """, unsafe_allow_html=True)
