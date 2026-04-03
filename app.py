@@ -6,6 +6,7 @@
 #  ✅ 단위 변환 수정 (WALCL=M$, RRP=B$, TGA=M$)
 #  ✅ S&P500 직접 호출 (캐시 충돌 방지)
 #  ✅ 데이터 실패 진단 UI 포함
+#  ✅ 문법 에러(SyntaxError) 완벽 수정 및 심층 분석 섹션 추가
 # ============================================================
 import subprocess, sys, warnings
 warnings.filterwarnings("ignore")
@@ -548,7 +549,7 @@ with mi1:
 
 
 # ═══════════════════════════════════════════════════════════
-#  §8  종합 비교 차트
+#  §8  종합 비교 차트 (오류 완벽 수정)
 # ═══════════════════════════════════════════════════════════
 sec("📊", "종합 비교 차트")
 
@@ -602,52 +603,60 @@ with tab2:
         margin=dict(l=20, r=20, t=45, b=20),
         font=dict(color="#8AAAC8", family="IBM Plex Mono", size=11),
     )
-    report_html = f"""
-    <div style="background: linear-gradient(140deg, #131E2E, #0C1520); border: 1px solid #1E3050; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-        <div style="font-size: 1.1rem; font-weight: 800; color: #00D4FF; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-            <span>💡</span> 핵심 자산 배분 전략
-        </div>
-        <div style="font-size: 1rem; font-weight: 600; line-height: 1.6; margin-bottom: 20px; color: {s_color}; background: #060A12; padding: 16px; border-radius: 8px; border: 1px solid #1A2A3F;">
-            {strategy}
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
-            <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
-                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 시장 심리 및 유동성</div>
-                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
-                    <div>• {vix_msg}</div>
-                    <div>• {sys_msg}</div>
-                </div>
-            </div>
-            <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
-                <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 매크로 및 신용 환경</div>
-                <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
-                    <div>• {sofr_msg}</div>
-                    <div>• {totll_msg}</div>
-                    <div>• {yield_msg}</div>
-                    <div>• {bei_msg}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    """
-    st.markdown(report_html, unsafe_allow_html=True)
-except Exception:
-    pass
+    fig2.update_xaxes(gridcolor="#141E2E", color="#4A6A8A")
+    fig2.update_yaxes(gridcolor="#141E2E", color="#4A6A8A")
+    st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
+with tab3:
+    risk_pairs = [
+        ("VIX",  "^VIX",  "#EF4444"),
+        ("MOVE", "^MOVE", "#F59E0B"),
+        ("HYG",  "HYG",   "#8B5CF6"),
+    ]
+    fig3 = go.Figure()
+    for name, tk, clr in risk_pairs:
+        _, _, h = get_yf(tk, "1y", "1wk")
+        if h is not None and not h.empty:
+            n = h["Close"] / h["Close"].iloc[0] * 100
+            fig3.add_trace(go.Scatter(
+                x=h.index, y=n, mode="lines",
+                name=name, line=dict(color=clr, width=2.2)
+            ))
+    fig3.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
+    st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
+
+with tab4:
+    kr_pairs = [
+        ("KOSPI",  "^KS11", "#F59E0B"),
+        ("KOSDAQ", "^KQ11", "#10B981"),
+    ]
+    fig4 = go.Figure()
+    for name, tk, clr in kr_pairs:
+        _, _, h = get_yf(tk, "6mo", "1d")
+        if h is not None and not h.empty:
+            n = h["Close"] / h["Close"].iloc[0] * 100
+            fig4.add_trace(go.Scatter(
+                x=h.index, y=n, mode="lines",
+                name=name, line=dict(color=clr[:7], width=2.2),
+                fill="tozeroy",
+                fillcolor=hex_to_rgba(clr[:7], 0.10)
+            ))
+    fig4.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
+    st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
 
 # ═══════════════════════════════════════════════════════════
-#  §12 심층 지표 분석 (상세보기)
+#  §12 심층 지표 분석 (상세보기 추가)
 # ═══════════════════════════════════════════════════════════
 st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 sec("🔍", "심층 지표 분석 (상세보기)")
-st.markdown("<div class='ksub' style='margin-bottom: 15px;'>원하는 지표를 선택하여 과거 3년간의 추이와 AI 평가, 상세 의미를 확인하세요.</div>", unsafe_allow_html=True)
+st.caption("원하는 지표를 선택하여 과거 3년간의 추이와 AI 평가, 상세 의미를 확인하세요.")
 
 DETAIL_META = {
     "VIX (공포지수)": {"ticker": "^VIX", "type": "yf", "desc": "시장이 앞으로 얼마나 출렁일지 예상하는 지수입니다. 20 이하는 안정, 30 이상은 경계 수준입니다."},
     "MOVE (채권 변동성)": {"ticker": "^MOVE", "type": "yf", "desc": "미국 국채 시장의 변동성을 보여주는 채권판 VIX입니다. 주식 시장의 공포지수보다 채권 시장의 발작이 거시적 금융 위기를 훨씬 더 빨리 잡아냅니다."},
     "장단기 금리차 (10Y-2Y)": {"ticker": "T10Y2Y", "type": "fred", "desc": "10년 금리에서 2년 금리를 뺀 값입니다. 이 값이 음수(-)로 뒤집히면 '역전'이라고 하며, 역사적으로 강력한 경기침체 선행 경고 신호입니다."},
     "하이일드 스프레드": {"ticker": "BAMLH0A0HYM2", "type": "fred", "desc": "안전한 미국 국채와 부도 위험이 있는 투기등급 채권 간의 금리 격차입니다. 이 격차가 벌어지면 한계 기업들의 자금줄이 마르고 부도 위험이 커진다는 뜻(신용 경색)입니다."},
-    "달러 인덱스 (DXY)": {"ticker": "DX-Y.NYB", "type": "yf", "desc": "유로, 엔 등 주요 주요 통화 대비 미국 달러의 평균 가치입니다. 강달러 현상은 글로벌 투자 자금이 미국으로 빨려 들어가 신흥국 증시 유동성에 악재로 작용합니다."},
+    "달러 인덱스 (DXY)": {"ticker": "DX-Y.NYB", "type": "yf", "desc": "유로, 엔 등 주요 통화 대비 미국 달러의 평균 가치입니다. 강달러 현상은 글로벌 투자 자금이 미국으로 빨려 들어가 신흥국 증시 유동성에 악재로 작용합니다."},
     "연준 총자산 (WALCL)": {"ticker": "WALCL", "type": "fred", "desc": "미국 중앙은행(Fed)이 돈을 찍어내어 보유하고 있는 자산의 총합입니다. 상승하면 시중에 돈을 푸는 양적완화(QE), 하락하면 시중의 달러를 흡수하는 양적긴축(QT)을 의미합니다."},
     "역레포 잔액 (RRP)": {"ticker": "RRPONTSYD", "type": "fred", "desc": "시중에 갈 곳을 잃은 단기 잉여 대기 자금이 연준 창고로 들어간 금액입니다. 이 잔액이 줄어든다는 것은 창고에서 돈이 빠져나와 주식이나 실물 시장으로 흘러가고 있다는 긍정적인 신호입니다."},
 }
@@ -683,7 +692,7 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
         _, _, df_detail = get_yf(meta["ticker"], "3y", "1d")
         series_detail = df_detail["Close"] if df_detail is not None else None
     else:
-        series_detail = get_fred(meta["ticker"], limit=756) # 약 3년치(252영업일 * 3)
+        series_detail = get_fred(meta["ticker"], limit=756) # 약 3년치
 
     if series_detail is not None and not series_detail.empty:
         cur_val = float(series_detail.iloc[-1])
@@ -693,11 +702,12 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
         
         status_text, status_color = eval_detail(meta["ticker"], cur_val)
         
-        # 단위 스케일 보정 (FRED 자산 지표들)
         unit_str = ""
-        if meta["ticker"] in ["WALCL", "RRPONTSYD"]:
+        if meta["ticker"] in ["WALCL"]:
             series_detail = series_detail / 1000
             cur_val, prev_val, chg = cur_val / 1000, prev_val / 1000, chg / 1000
+            unit_str = " (B$)"
+        elif meta["ticker"] == "RRPONTSYD":
             unit_str = " (B$)"
             
         fig_det = go.Figure()
@@ -708,7 +718,6 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
             fill="tozeroy", fillcolor=hex_to_rgba("#00D4FF", 0.15)
         ))
         
-        # 임계값 가이드라인 추가
         if meta["ticker"] == "^VIX":
             fig_det.add_hline(y=30, line_dash="dash", line_color="#FF5555", opacity=0.8)
         elif meta["ticker"] == "^MOVE":
@@ -719,7 +728,7 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
         fig_det.update_layout(**CHART_LAYOUT, height=450, title=f"{selected_ind_name} (최근 3년 추이)")
         st.plotly_chart(fig_det, use_container_width=True, config={"displayModeBar": False})
 
-        st.markdown(f"""
+        st.markdown(f'''
         <div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 24px; margin-bottom: 30px;">
             <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: center; margin-bottom: 20px;">
                 <div>
@@ -745,10 +754,9 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중..."):
                 <div style="color: #fef08a; font-size: 0.9rem; line-height: 1.6; font-weight: 500;">{meta['desc']}</div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
     else:
         st.warning("선택한 지표의 상세 데이터를 불러올 수 없습니다.")
-
 
 # ═══════════════════════════════════════════════════════════
 #  사이드바
