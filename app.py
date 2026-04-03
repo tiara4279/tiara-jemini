@@ -3,7 +3,8 @@
 #  ✅ 앱 마비 원인 (install_missing) 완전 제거
 #  ✅ 무한 로딩 원인 (fredapi) 제거 및 requests.get (3.5초 타임아웃) 교체
 #  ✅ Net Liquidity 실패 UI 논리 오류 완벽 수정
-#  ✅ 심층 지표 분석 (상세보기) 섹션 통합 완료
+#  ✅ TypeError(중복 키워드 인자) 완벽 해결
+#  ✅ 2x2 카드 배열 및 기간 버튼이 포함된 심층 지표 분석 섹션 탑재
 # ============================================================
 import warnings
 warnings.filterwarnings("ignore")
@@ -528,7 +529,7 @@ with mi1:
 
 
 # ═══════════════════════════════════════════════════════════
-#  §8  종합 비교 차트
+#  §8  종합 비교 차트 (TypeError 방지 - dictionary 직접 넘김 적용)
 # ═══════════════════════════════════════════════════════════
 sec("📊", "종합 비교 차트")
 
@@ -555,7 +556,8 @@ with tab1:
                 x=h.index, y=n, mode="lines",
                 name=name, line=dict(color=clr, width=2.2)
             ))
-    fig.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
+    # 문법 에러 원천 차단을 위해 dict 병합 방식 사용
+    fig.update_layout(CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 with tab2:
@@ -601,7 +603,7 @@ with tab3:
                 x=h.index, y=n, mode="lines",
                 name=name, line=dict(color=clr, width=2.2)
             ))
-    fig3.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
+    fig3.update_layout(CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
 with tab4:
@@ -620,12 +622,12 @@ with tab4:
                 fill="tozeroy",
                 fillcolor=hex_to_rgba(clr[:7], 0.10)
             ))
-    fig4.update_layout(**CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
+    fig4.update_layout(CHART_LAYOUT, yaxis_title="정규화 (시작=100)")
     st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
 
 
 # ═══════════════════════════════════════════════════════════
-#  §9 미국 핵심 유동성 흐름 (Net Liquidity) - 논리 오류 완벽 수정
+#  §9 미국 핵심 유동성 흐름 (Net Liquidity)
 # ═══════════════════════════════════════════════════════════
 sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
 st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
@@ -653,7 +655,8 @@ with st.spinner("유동성 차트 데이터 로딩 중..."):
         fig_liq.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Net_Liquidity'], name="순유동성 (B$)", line=dict(color='#00D4FF', width=2.5)), secondary_y=False)
         fig_liq.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="S&P 500", line=dict(color='#FF5555', width=1.5)), secondary_y=True)
         
-        fig_liq.update_layout(**CHART_LAYOUT, height=450, title="Net Liquidity vs S&P 500 (최근 1년)")
+        # TypeError 방지를 위해 파이썬의 사전 병합 방식(CHART_LAYOUT 전달) 사용
+        fig_liq.update_layout(CHART_LAYOUT, height=450, title="Net Liquidity vs S&P 500 (최근 1년)")
         st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
         
         st.markdown("""<div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 16px; margin-bottom: 30px;">
@@ -708,7 +711,7 @@ with st.spinner("국채금리 분해 차트 로딩 중..."):
         fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['T10YIE'], name="기대인플레이션 (좌)", line=dict(color='#8AAAC8', width=1.5)), secondary_y=False)
         fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['ACMTP10'], name="기간 프리미엄 (우)", line=dict(color='#F59E0B', width=2.5)), secondary_y=True)
         
-        fig_dec.update_layout(**CHART_LAYOUT, height=450, title="미국 10년물 국채금리 분해 (최근 1년)")
+        fig_dec.update_layout(CHART_LAYOUT, height=450, title="미국 10년물 국채금리 분해 (최근 1년)")
         fig_dec.update_yaxes(title_text="금리 (%)", secondary_y=False)
         fig_dec.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, showgrid=False)
         
@@ -718,99 +721,11 @@ with st.spinner("국채금리 분해 차트 로딩 중..."):
 
 
 # ═══════════════════════════════════════════════════════════
-#  §11 AI 매크로 종합 시황 진단
+#  §11 심층 지표 분석 (상세보기 프리미엄 패널) - 새롭게 추가!
 # ═══════════════════════════════════════════════════════════
-sec("📝", "AI 매크로 종합 시황 진단")
-
-vix_val, _, _ = get_yf("^VIX", "1mo", "1d")
-move_val, _, _ = get_yf("^MOVE", "1mo", "1d")
-
-t10y2y = get_fred("T10Y2Y", 2)
-yc_val = float(t10y2y.iloc[-1]) if t10y2y is not None else 0.0
-
-sofr = get_fred("SOFR", 2)
-iorb = get_fred("IORB", 2)
-sofr_spread = (float(sofr.iloc[-1]) - float(iorb.iloc[-1])) if sofr is not None and iorb is not None else 0.0
-
-bei10 = get_fred("T10YIE", 2)
-bei_val = float(bei10.iloc[-1]) if bei10 is not None else 0.0
-
-totll = get_fred("TOTLL", 2)
-totll_chg = (float(totll.iloc[-1]) - float(totll.iloc[-2])) if totll is not None and len(totll)>1 else 0.0
-
-dw = get_fred("WLCFLPCL", 2)
-btfp = get_fred("H41RESPALBFRB", 2)
-emerg_val = (float(dw.iloc[-1]) if dw is not None else 0.0) + (float(btfp.iloc[-1]) if btfp is not None else 0.0)
-
-COLOR_DANGER = "#FF5555"
-COLOR_SAFE = "#22D98A"
-COLOR_WARN = "#FFCC44"
-
-if vix_val and vix_val > 30: vix_msg = f"<b style='color:{COLOR_DANGER};'>위험 심리:</b> VIX가 {vix_val:.2f}로 시장에 공포 심리가 팽배합니다."
-else: vix_msg = f"<b style='color:{COLOR_SAFE};'>위험 심리:</b> VIX가 {vix_val:.2f}로 시장이 안정적인 흐름을 유지 중입니다." if vix_val else "VIX 데이터 대기 중"
-
-if emerg_val > 500 or (move_val and move_val > 140): sys_msg = f"<b style='color:{COLOR_DANGER};'>시스템 경고:</b> 연준 긴급 대출이나 채권 변동성이 높아 스트레스 징후가 관찰됩니다."
-else: sys_msg = f"<b style='color:{COLOR_SAFE};'>시스템 안정:</b> 긴급 대출 및 채권 시장이 안정적이며 시스템 위기 징후는 없습니다."
-
-if sofr_spread > 0.05: sofr_msg = f"<b style='color:{COLOR_DANGER};'>조달 스트레스:</b> 단기 달러 경색 조짐이 보입니다."
-else: sofr_msg = f"<b style='color:{COLOR_SAFE};'>조달 안정:</b> 단기 자금 시장 융통이 원활합니다."
-
-if totll_chg < 0: totll_msg = f"<b style='color:{COLOR_DANGER};'>신용 축소:</b> 상업은행 대출이 감소하여 신용 공급 둔화 우려가 있습니다."
-elif totll_chg > 0: totll_msg = f"<b style='color:{COLOR_SAFE};'>신용 팽창:</b> 상업은행 대출이 증가하며 신용 창출이 이어지고 있습니다."
-else: totll_msg = f"<b style='color:{COLOR_WARN};'>신용 정체:</b> 상업은행 대출 규모가 관망세를 보이고 있습니다."
-
-if yc_val < 0: yield_msg = f"<b style='color:{COLOR_DANGER};'>침체 선행:</b> 장단기 금리차({yc_val:.2f}%) 역전으로 경기 둔화 가능성이 암시됩니다."
-else: yield_msg = f"<b style='color:{COLOR_SAFE};'>성장 기대:</b> 장단기 금리차({yc_val:.2f}%)가 정상화되어 성장 기대가 반영 중입니다."
-
-if bei_val > 2.5: bei_msg = f"<b style='color:{COLOR_DANGER};'>물가 불안:</b> 기대인플레({bei_val:.2f}%)가 높아 긴축 우려가 있습니다."
-else: bei_msg = f"<b style='color:{COLOR_SAFE};'>물가 안정:</b> 기대인플레({bei_val:.2f}%)가 연준의 목표 궤적에 부합합니다."
-
-if yc_val < 0 and sofr_spread > 0.05:
-    strategy = "침체 시그널과 펀딩 스트레스가 중첩되었습니다. <b style='color:#FF5555'>현금 및 채권 방어적 포트폴리오 비중 확대</b>를 강력히 권장합니다."
-    s_color = COLOR_DANGER
-elif yc_val >= 0 and sofr_spread <= 0:
-    strategy = "신용 조달이 안정적이며 경제 성장이 기대됩니다. <b style='color:#22D98A'>위험 자산(주식)의 비중 유지 및 랠리 동참</b>이 유리한 환경입니다."
-    s_color = COLOR_SAFE
-else:
-    strategy = "거시 지표 방향성이 혼재되어 있습니다. <b style='color:#FFCC44'>관망세 유지 및 선별적 접근</b>이 필요합니다."
-    s_color = COLOR_WARN
-
-report_html = f"""
-<div style="background: linear-gradient(140deg, #131E2E, #0C1520); border: 1px solid #1E3050; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-    <div style="font-size: 1.1rem; font-weight: 800; color: #00D4FF; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-        <span>💡</span> 핵심 자산 배분 전략
-    </div>
-    <div style="font-size: 1rem; font-weight: 600; line-height: 1.6; margin-bottom: 20px; color: {s_color}; background: #060A12; padding: 16px; border-radius: 8px; border: 1px solid #1A2A3F;">
-        {strategy}
-    </div>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px;">
-        <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
-            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 시장 심리 및 유동성</div>
-            <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
-                <div>• {vix_msg}</div>
-                <div>• {sys_msg}</div>
-            </div>
-        </div>
-        <div style="background: #080E1A; border: 1px solid #1A2A3F; border-radius: 10px; padding: 18px;">
-            <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; color: #00D4FF; border-bottom: 1px solid #1E3050; padding-bottom: 8px;">📌 매크로 및 신용 환경</div>
-            <div style="line-height: 1.8; font-size: 0.85rem; color: #fef08a;">
-                <div>• {sofr_msg}</div>
-                <div>• {totll_msg}</div>
-                <div>• {yield_msg}</div>
-                <div>• {bei_msg}</div>
-            </div>
-        </div>
-    </div>
-</div>
-"""
-st.markdown(report_html, unsafe_allow_html=True)
-
-
-# ═══════════════════════════════════════════════════════════
-#  §12 심층 지표 분석 (상세보기 추가)
-# ═══════════════════════════════════════════════════════════
+st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 sec("🔍", "심층 지표 분석 (상세보기)")
-st.caption("원하는 지표를 선택하여 상세 차트(기간 선택)와 AI 진단, 핵심 의미를 확인하세요.")
+st.caption("원하는 지표를 선택하여 2Y/5Y/10Y 추이 차트, AI 진단, 핵심 의미를 확인하세요.")
 
 # ── 2x2 카드 그리드 및 완벽한 설명을 위한 고급 메타데이터 ──
 DETAIL_META = {
@@ -992,12 +907,15 @@ with st.spinner(f"{selected_ind_name} 상세 데이터 로딩 중 (최대 10년 
                 font=dict(color="#8AAAC8", size=11, family="IBM Plex Mono")
             )
         )
-        fig_det.update_yaxes(showgrid=True, gridcolor="#141E2E", side="left", tickfont=dict(color="#8AAAC8", family="IBM Plex Mono"))
+        # 파이썬 에러 원천 방지 (dictionary 직접 전달 방식)
         fig_det.update_layout(
+            CHART_LAYOUT, 
             height=380, margin=dict(l=10, r=10, t=30, b=10),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             hovermode="x unified"
         )
+        fig_det.update_yaxes(showgrid=True, gridcolor="#141E2E", side="left", tickfont=dict(color="#8AAAC8", family="IBM Plex Mono"))
+        
         st.plotly_chart(fig_det, use_container_width=True, config={"displayModeBar": False})
 
         # ── 3. 요약 블랙 박스 & 2x2 상세 설명 카드 그리드 (CSS Grid 적용) ──
