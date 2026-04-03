@@ -5,6 +5,7 @@
 #  ✅ Net Liquidity 실패 UI 논리 오류 완벽 수정
 #  ✅ TypeError(중복 키워드 인자) 완벽 해결
 #  ✅ 고객 요청사항: 이미지와 동일한 2x2 카드 및 프리미엄 분석 UI 100% 구현
+#  ✅ HTML 마크다운 렌더링 오류(들여쓰기로 인한 코드블록화 현상) 완벽 수정
 # ============================================================
 import warnings
 warnings.filterwarnings("ignore")
@@ -344,7 +345,7 @@ cols = st.columns(6)
 for col, (name, tk, color, desc) in zip(cols, FX):
     with col:
         v, chg, h = get_yf(tk, "1mo", "1d")
-        st.markdown(card(name, f(v, 4), chg, desc), unsafe_allow_html=True)
+        st.markdown(card(name, f(v, 4), chg, desc).replace('\n', ''), unsafe_allow_html=True)
         spark(h, color, 65)
 
 
@@ -362,7 +363,7 @@ cols = st.columns(3)
 for col, (name, tk, color, desc) in zip(cols, KR):
     with col:
         v, chg, h = get_yf(tk, "3mo", "1d")
-        st.markdown(card(name, f(v, 2), chg, desc), unsafe_allow_html=True)
+        st.markdown(card(name, f(v, 2), chg, desc).replace('\n', ''), unsafe_allow_html=True)
         spark(h, color, 100)
 
 
@@ -383,7 +384,7 @@ c1, c2, c3 = st.columns(3)
 for i, (name, tk, color, desc) in enumerate(US):
     with [c1, c2, c3][i % 3]:
         v, chg, h = get_yf(tk, "3mo", "1d")
-        st.markdown(card(name, f(v, 2), chg, desc), unsafe_allow_html=True)
+        st.markdown(card(name, f(v, 2), chg, desc).replace('\n', ''), unsafe_allow_html=True)
         spark(h, color, 85)
 
 
@@ -396,12 +397,12 @@ r1, r2, r3, r4 = st.columns(4)
 
 with r1:
     v, chg, h = get_yf("^VIX", "6mo", "1d")
-    st.markdown(card("VIX (공포지수)", f(v, 2), chg, "CBOE 변동성 지수", risk_badge("VIX", v)), unsafe_allow_html=True)
+    st.markdown(card("VIX (공포지수)", f(v, 2), chg, "CBOE 변동성 지수", risk_badge("VIX", v)).replace('\n', ''), unsafe_allow_html=True)
     spark(h, "#EF4444", 85)
 
 with r2:
     v, chg, h = get_yf("^MOVE", "6mo", "1d")
-    st.markdown(card("MOVE (채권 변동성)", f(v, 2), chg, "ICE BofA 채권 변동성", risk_badge("MOVE", v)), unsafe_allow_html=True)
+    st.markdown(card("MOVE (채권 변동성)", f(v, 2), chg, "ICE BofA 채권 변동성", risk_badge("MOVE", v)).replace('\n', ''), unsafe_allow_html=True)
     spark(h, "#F59E0B", 85)
 
 with r3:
@@ -412,22 +413,23 @@ with r3:
         diff = lv - pv
         clr  = "kup" if lv >= 0 else "kdn"
         arr  = "▲"   if lv >= 0 else "▼"
-        st.markdown(f"""
+        html_str = f"""
         <div class="kcard">
           <div class="klabel">장단기 금리차 (10Y-2Y)</div>
           <div class="kval">{lv:+.2f}%</div>
           <span class="{clr}">{arr} {abs(diff):.3f}%p</span>
           <div class="ksub">FRED T10Y2Y — 수익률 곡선</div>
-        </div>""", unsafe_allow_html=True)
+        </div>"""
+        st.markdown(html_str.replace('\n', ''), unsafe_allow_html=True)
         spark(ts_data, "#10B981", 85, is_series=True)
     else:
         v, chg, h = get_yf("^TNX", "6mo", "1d")
-        st.markdown(card("10Y 국채금리 (TNX)", f(v, 3, suf="%"), chg, "미국 10년 국채"), unsafe_allow_html=True)
+        st.markdown(card("10Y 국채금리 (TNX)", f(v, 3, suf="%"), chg, "미국 10년 국채").replace('\n', ''), unsafe_allow_html=True)
         spark(h, "#10B981", 85)
 
 with r4:
     v, chg, h = get_yf("HYG", "6mo", "1d")
-    st.markdown(card("HYG (하이일드 ETF)", f(v, 2, pre="$"), chg, "HY 스프레드 프록시"), unsafe_allow_html=True)
+    st.markdown(card("HYG (하이일드 ETF)", f(v, 2, pre="$"), chg, "HY 스프레드 프록시").replace('\n', ''), unsafe_allow_html=True)
     spark(h, "#8B5CF6", 85)
 
 hy = get_fred("BAMLH0A0HYM2")
@@ -437,7 +439,7 @@ if hy is not None and len(hy) > 0:
     chg_hy = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
     fe1, fe2 = st.columns(2)
     with fe1:
-        st.markdown(card("하이일드 스프레드 (OAS)", f(lv, 2, suf="%"), chg_hy, "ICE BofA US HY OAS"), unsafe_allow_html=True)
+        st.markdown(card("하이일드 스프레드 (OAS)", f(lv, 2, suf="%"), chg_hy, "ICE BofA US HY OAS").replace('\n', ''), unsafe_allow_html=True)
         spark(hy, "#EF4444", 80, is_series=True)
 
 
@@ -459,10 +461,10 @@ for col, (sid, label, color, demo) in zip([l1, l2, l3], LIQ):
             lv  = float(data.iloc[-1])
             pv  = float(data.iloc[-2]) if len(data) > 1 else lv
             chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
-            st.markdown(card(label, f(lv/1000, 1, suf=" T$"), chg, f"FRED: {sid}"), unsafe_allow_html=True)
+            st.markdown(card(label, f(lv/1000, 1, suf=" T$"), chg, f"FRED: {sid}").replace('\n', ''), unsafe_allow_html=True)
             spark(data, color, 85, is_series=True)
         else:
-            st.markdown(card(label, "데이터 없음", None, "통신 지연"), unsafe_allow_html=True)
+            st.markdown(card(label, "데이터 없음", None, "통신 지연").replace('\n', ''), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -485,10 +487,10 @@ for col, (sid, label, color, unit, demo, dp) in zip(crs, CRED):
             lv  = float(data.iloc[-1])
             pv  = float(data.iloc[-2]) if len(data) > 1 else lv
             chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
-            st.markdown(card(label, f(lv, dp, suf=suf), chg, f"FRED: {sid}"), unsafe_allow_html=True)
+            st.markdown(card(label, f(lv, dp, suf=suf), chg, f"FRED: {sid}").replace('\n', ''), unsafe_allow_html=True)
             spark(data, color, 80, is_series=True)
         else:
-            st.markdown(card(label, "데이터 없음", None, "통신 지연"), unsafe_allow_html=True)
+            st.markdown(card(label, "데이터 없음", None, "통신 지연").replace('\n', ''), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -500,12 +502,12 @@ m1, m2, m3, m4 = st.columns(4)
 
 with m1:
     v, chg, h = get_yf("DX-Y.NYB", "6mo", "1d")
-    st.markdown(card("DXY (달러 인덱스)", f(v, 3), chg, "ICE US Dollar Index"), unsafe_allow_html=True)
+    st.markdown(card("DXY (달러 인덱스)", f(v, 3), chg, "ICE US Dollar Index").replace('\n', ''), unsafe_allow_html=True)
     spark(h, "#F59E0B", 90)
 
 with m2:
     v, chg, h = get_yf("GC=F", "6mo", "1d")
-    st.markdown(card("금 선물", f(v, 2, pre="$"), chg, "COMEX Gold $/oz"), unsafe_allow_html=True)
+    st.markdown(card("금 선물", f(v, 2, pre="$"), chg, "COMEX Gold $/oz").replace('\n', ''), unsafe_allow_html=True)
     spark(h, "#FBBF24", 90)
 
 with m3:
@@ -514,10 +516,10 @@ with m3:
         lv  = float(bei5.iloc[-1])
         pv  = float(bei5.iloc[-2]) if len(bei5) > 1 else lv
         chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
-        st.markdown(card("5Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T5YIE"), unsafe_allow_html=True)
+        st.markdown(card("5Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T5YIE").replace('\n', ''), unsafe_allow_html=True)
         spark(bei5, "#10B981", 90, is_series=True)
     else:
-        st.markdown(card("5Y 기대 인플레이션", "데이터 없음", None, "통신 지연"), unsafe_allow_html=True)
+        st.markdown(card("5Y 기대 인플레이션", "데이터 없음", None, "통신 지연").replace('\n', ''), unsafe_allow_html=True)
 
 with m4:
     bei10 = get_fred("T10YIE", 40)
@@ -525,20 +527,20 @@ with m4:
         lv  = float(bei10.iloc[-1])
         pv  = float(bei10.iloc[-2]) if len(bei10) > 1 else lv
         chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
-        st.markdown(card("10Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T10YIE"), unsafe_allow_html=True)
+        st.markdown(card("10Y 기대 인플레이션", f(lv, 2, suf="%"), chg, "FRED T10YIE").replace('\n', ''), unsafe_allow_html=True)
         spark(bei10, "#3B82F6", 90, is_series=True)
     else:
-        st.markdown(card("10Y 기대 인플레이션", "데이터 없음", None, "통신 지연"), unsafe_allow_html=True)
+        st.markdown(card("10Y 기대 인플레이션", "데이터 없음", None, "통신 지연").replace('\n', ''), unsafe_allow_html=True)
 
 v2, chg2, h2 = get_yf("CL=F", "6mo", "1d")
 mi1, _mi2, _mi3 = st.columns([1, 1, 2])
 with mi1:
-    st.markdown(card("WTI 원유 선물", f(v2, 2, pre="$", suf="/bbl"), chg2, "NYMEX Crude Oil"), unsafe_allow_html=True)
+    st.markdown(card("WTI 원유 선물", f(v2, 2, pre="$", suf="/bbl"), chg2, "NYMEX Crude Oil").replace('\n', ''), unsafe_allow_html=True)
     spark(h2, "#64748B", 80)
 
 
 # ═══════════════════════════════════════════════════════════
-#  §8  종합 비교 차트 (오류 완벽 수정)
+#  §8  종합 비교 차트
 # ═══════════════════════════════════════════════════════════
 sec("📊", "종합 비교 차트")
 
@@ -565,7 +567,6 @@ with tab1:
                 x=h.index, y=n, mode="lines",
                 name=name, line=dict(color=clr, width=2.2)
             ))
-    # 문법 에러 원천 차단을 위해 dict 병합(copy 후 update) 방식 사용
     layout_cfg = CHART_LAYOUT.copy()
     layout_cfg.update(yaxis_title="정규화 (시작=100)")
     fig.update_layout(**layout_cfg)
@@ -644,11 +645,112 @@ with tab4:
 
 
 # ═══════════════════════════════════════════════════════════
-#  §12 심층 지표 분석 (고객님 요청 100% 반영본)
+#  §9 미국 핵심 유동성 흐름 (Net Liquidity)
+# ═══════════════════════════════════════════════════════════
+sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
+st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
+
+with st.spinner("유동성 차트 데이터 로딩 중..."):
+    walcl = get_fred('WALCL', limit=300)
+    rrp = get_fred('RRPONTSYD', limit=300)
+    tga = get_fred('WTREGEN', limit=300)
+    
+    _, _, sp500_df = get_yf('^GSPC', period='1y', interval='1d')
+    
+    if walcl is not None and rrp is not None and tga is not None and sp500_df is not None:
+        walcl_val = walcl / 1000  # 단위 변환
+        sp500_s = sp500_df['Close']
+        
+        if hasattr(sp500_s.index, 'tz') and sp500_s.index.tz is not None:
+            sp500_s.index = sp500_s.index.tz_localize(None)
+        
+        df_liq = pd.DataFrame({'WALCL': walcl_val, 'RRP': rrp, 'TGA': tga}).ffill().dropna()
+        df_liq['Net_Liquidity'] = df_liq['WALCL'] - df_liq['RRP'] - df_liq['TGA']
+        
+        df_plot = df_liq.join(sp500_s, how='inner').ffill().dropna()
+        
+        fig_liq = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_liq.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Net_Liquidity'], name="순유동성 (B$)", line=dict(color='#00D4FF', width=2.5)), secondary_y=False)
+        fig_liq.add_trace(go.Scatter(x=df_plot.index, y=df_plot['Close'], name="S&P 500", line=dict(color='#FF5555', width=1.5)), secondary_y=True)
+        
+        layout_liq = CHART_LAYOUT.copy()
+        layout_liq.update(height=450, title="Net Liquidity vs S&P 500 (최근 1년)")
+        fig_liq.update_layout(**layout_liq)
+        st.plotly_chart(fig_liq, use_container_width=True, config={'displayModeBar': False})
+        
+        html_str2 = """
+        <div style="background: #0C1420; border: 1px solid #1E3050; border-radius: 12px; padding: 16px; margin-bottom: 30px;">
+        <div style="font-size: 0.9rem; font-weight: 700; color:#00D4FF; margin-bottom: 8px;">📌 Net Liquidity(순유동성) 공식: 연준 대차대조표 - 역레포(RRP) - 재무부 계좌(TGA)</div>
+        <div style="font-size: 0.8rem; color: #8AAAC8; line-height: 1.5;">
+        중앙은행이 시장에 실질적으로 공급한 순수 유동성 자금의 양입니다.<br>
+        통상적으로 <b style="color:#00D4FF">파란선(순유동성)</b>이 오르면 시중에 돈이 넘쳐나 <b style="color:#FF5555">빨간선(S&P 500)</b>도 함께 오르고, 내리면 주가도 조정을 받는 <b>강한 양(+)의 상관관계</b>를 가집니다.
+        </div></div>"""
+        st.markdown(html_str2.replace('\n', ''), unsafe_allow_html=True)
+    else:
+        html_fail = """
+        <div style="background:#1A0E0E; border:1px solid #8B3A3A; border-radius:10px; padding:16px; margin-bottom:16px;">
+            <div style="font-size:0.9rem; font-weight:700; color:#FF6B6B; margin-bottom:6px;">데이터 로딩 실패 — 항목별 상태</div>
+            <div style="font-size:0.82rem; color:#CC9999; line-height:1.6;">서버 접속 지연으로 데이터를 불러오지 못했습니다.</div>
+        </div>"""
+        st.markdown(html_fail.replace('\n', ''), unsafe_allow_html=True)
+
+        dc1, dc2, dc3, dc4 = st.columns(4)
+        status_data = [
+            ("WALCL",     walcl is not None),
+            ("RRPONTSYD", rrp is not None),
+            ("WTREGEN",   tga is not None),
+            ("S&P 500",   sp500_df is not None),
+        ]
+        for col, (name, status) in zip([dc1, dc2, dc3, dc4], status_data):
+            with col:
+                ok_color = "#22D98A" if status else "#FF5555"
+                ok_text  = "READY"   if status else "FAILED"
+                html_status = f"""
+                <div style="background:#0C1420; border:2px solid {ok_color}; border-radius:8px; padding:14px; text-align:center;">
+                  <div style="font-size:0.75rem; font-weight:700; color:#6B8EAE; margin-bottom:6px;">{name}</div>
+                  <div style="font-family:'IBM Plex Mono',monospace; font-size:1.1rem; font-weight:800; color:{ok_color};">{ok_text}</div>
+                </div>"""
+                st.markdown(html_status.replace('\n', ''), unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════
+#  §10 미국 10년물 국채금리 분해 
+# ═══════════════════════════════════════════════════════════
+sec("🇺🇸", "미국 10년물 국채금리 분해")
+st.caption("국채금리를 '단기금리 기대경로', '기대인플레이션', '기간 프리미엄'으로 분해하여 시장의 진짜 의도를 파악합니다.")
+
+with st.spinner("국채금리 분해 차트 로딩 중..."):
+    dgs10 = get_fred('DGS10', limit=300)
+    t10yie = get_fred('T10YIE', limit=300)
+    acmtp10 = get_fred('ACMTP10', limit=300)
+    
+    if dgs10 is not None and t10yie is not None and acmtp10 is not None:
+        df_dec = pd.DataFrame({'10Y': dgs10, 'T10YIE': t10yie, 'ACMTP10': acmtp10}).ffill().dropna()
+        df_dec['Short Rate'] = df_dec['10Y'] - df_dec['T10YIE'] - df_dec['ACMTP10']
+        
+        fig_dec = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['10Y'], name="10년물 금리 (좌)", line=dict(color='#3B82F6', width=2.5)), secondary_y=False)
+        fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['Short Rate'], name="단기금리 기대경로 (좌)", line=dict(color='#06B6D4', width=1.5)), secondary_y=False)
+        fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['T10YIE'], name="기대인플레이션 (좌)", line=dict(color='#8AAAC8', width=1.5)), secondary_y=False)
+        fig_dec.add_trace(go.Scatter(x=df_dec.index, y=df_dec['ACMTP10'], name="기간 프리미엄 (우)", line=dict(color='#F59E0B', width=2.5)), secondary_y=True)
+        
+        layout_dec = CHART_LAYOUT.copy()
+        layout_dec.update(height=450, title="미국 10년물 국채금리 분해 (최근 1년)")
+        fig_dec.update_layout(**layout_dec)
+        fig_dec.update_yaxes(title_text="금리 (%)", secondary_y=False)
+        fig_dec.update_yaxes(title_text="기간 프리미엄 (%p)", secondary_y=True, showgrid=False)
+        
+        st.plotly_chart(fig_dec, use_container_width=True, config={'displayModeBar': False})
+    else:
+        st.warning("⚠️ 데이터를 완전히 불러오지 못했습니다. (통신 지연)")
+
+
+# ═══════════════════════════════════════════════════════════
+#  §11 심층 지표 분석 (상세보기 프리미엄 패널) 
 # ═══════════════════════════════════════════════════════════
 st.markdown("<hr>".replace('\n', ''), unsafe_allow_html=True)
 sec("🔍", "심층 지표 분석 (상세보기)")
-st.caption("원하는 지표를 선택하면 기간별 상세 차트, AI 요약 진단, 핵심 의미 4가지를 확인할 수 있습니다.")
+st.caption("원하는 지표를 선택하여 2Y/5Y/10Y 추이 차트, AI 진단, 핵심 의미 4가지를 확인할 수 있습니다.")
 
 # 지표 설명과 2x2 카드 데이터를 담은 메타 딕셔너리
 DETAIL_META = {
@@ -805,14 +907,15 @@ with st.spinner(f"{selected_ind_name} 상세 데이터를 불러오고 있습니
         chg_2y_arrow = "▲" if chg_2y >= 0 else "▼"
         
         # ── 1. 차트 헤더 및 인터랙티브 Plotly 차트 (고객님 요청 UI 반영) ──
-        st.markdown(f"""
+        html_title = f"""
         <div style="margin-top: 15px; margin-bottom: 0px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
                 <h3 style="margin: 0; padding: 0; font-size: 1.3rem; font-weight: 800; color: #FFFFFF;">{selected_ind_name.split('(')[0].strip()} 추이</h3>
             </div>
             <div style="font-size: 0.85rem; color: #6B8EAE; font-weight: 600;">{meta['title_sub']}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        st.markdown(html_title.replace('\n', ''), unsafe_allow_html=True)
         
         fig_det = go.Figure()
         fig_det.add_trace(go.Scatter(
@@ -856,82 +959,77 @@ with st.spinner(f"{selected_ind_name} 상세 데이터를 불러오고 있습니
         fig_det.update_layout(**layout_det)
         st.plotly_chart(fig_det, use_container_width=True, config={"displayModeBar": False})
 
-        # ── 2. 고객님이 요청한 블랙 박스 & 2x2 카드 UI (완벽 일치) ──
-        # Python 포맷팅 에러 방지를 위해 변수 선언
+        # ── 2. 고객님이 요청한 블랙 박스 & 2x2 카드 UI (들여쓰기 제거로 코드블록화 완벽 방지) ──
         pfx = meta['prefix']
         unt = meta['unit']
         
-        st.markdown(f'''
-        <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 10px; margin-bottom: 30px;">
-            
-            <!-- 상단 요약 박스 (검은 배경) -->
-            <div style="padding: 24px; border-bottom: 1px solid #1A2A3F;">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                    <span style="background: transparent; border: 1px solid #2E3E50; color: #8AAAC8; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">최근 2년</span>
-                    <span style="background: {status_color}15; border: 1px solid {status_color}55; color: {status_color}; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: bold;">{status_badge}</span>
-                    <span style="color: #FFFFFF; font-size: 1.6rem; font-weight: 800; font-family: 'IBM Plex Mono', monospace; margin-left: 5px;">{pfx}{cur_val:,.2f}{unt}</span>
+        detail_html = f"""
+<div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 10px; margin-bottom: 30px;">
+    <!-- 상단 요약 박스 -->
+    <div style="padding: 24px; border-bottom: 1px solid #1A2A3F;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+            <span style="background: transparent; border: 1px solid #2E3E50; color: #8AAAC8; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">최근 2년</span>
+            <span style="background: {status_color}15; border: 1px solid {status_color}55; color: {status_color}; padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: bold;">{status_badge}</span>
+            <span style="color: #FFFFFF; font-size: 1.6rem; font-weight: 800; font-family: 'IBM Plex Mono', monospace; margin-left: 5px;">{pfx}{cur_val:,.2f}{unt}</span>
+        </div>
+        <div style="color: #AACCEE; font-size: 0.95rem; line-height: 1.6; font-weight: 500; margin-bottom: 10px;">
+            {status_desc}
+        </div>
+        <div style="color: #8AAAC8; font-size: 0.85rem; line-height: 1.6;">
+            전주({pfx}{val_1w:,.2f}{unt}) 대비 <span style="color: {chg_color}; font-weight: bold;">{chg_arrow} {pfx}{abs(chg_1w):,.2f}{unt}</span> · 
+            3개월 전({pfx}{val_3m:,.2f}{unt}) 대비 <span style="color: {chg_3m_color}; font-weight: bold;">{chg_3m_arrow}</span><br>
+            <span style="font-size: 0.75rem; color: #4A6888; font-family: 'IBM Plex Mono', monospace;">
+                📊 최근 2년: {pfx}{val_2y:,.2f}{unt} → {pfx}{cur_val:,.2f}{unt} ({chg_2y_arrow} {abs(chg_2y_pct):.1f}%) · {chg_arrow} {pfx}{abs(chg_1w):,.2f}{unt} 전주대비
+            </span>
+        </div>
+    </div>
+    <!-- 하단 2x2 상세 설명 영역 -->
+    <div style="padding: 24px; background-color: #060A12; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+            <span style="color: #FF5555; font-size: 1.1rem; font-weight: 800;">📌</span>
+            <span style="color: #FFFFFF; font-weight: 800; font-size: 1.05rem;">{selected_ind_name.split('(')[0].strip()}란?</span>
+        </div>
+        <div style="color: #8AAAC8; font-size: 0.9rem; line-height: 1.6; margin-bottom: 20px;">
+            {meta['desc']}
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+            <!-- Card 1 -->
+            <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">{meta['cards'][0]['icon']}</span>
+                    <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][0]['title']}</span>
                 </div>
-                
-                <div style="color: #AACCEE; font-size: 0.95rem; line-height: 1.6; font-weight: 500; margin-bottom: 10px;">
-                    {status_desc}
-                </div>
-                
-                <div style="color: #8AAAC8; font-size: 0.85rem; line-height: 1.6;">
-                    전주({pfx}{val_1w:,.2f}{unt}) 대비 <span style="color: {chg_color}; font-weight: bold;">{chg_arrow} {pfx}{abs(chg_1w):,.2f}{unt}</span> · 
-                    3개월 전({pfx}{val_3m:,.2f}{unt}) 대비 <span style="color: {chg_3m_color}; font-weight: bold;">{chg_3m_arrow}</span><br>
-                    <span style="font-size: 0.75rem; color: #4A6888; font-family: 'IBM Plex Mono', monospace;">
-                        📊 최근 2년: {pfx}{val_2y:,.2f}{unt} → {pfx}{cur_val:,.2f}{unt} ({chg_2y_arrow} {abs(chg_2y_pct):.1f}%) · {chg_arrow} {pfx}{abs(chg_1w):,.2f}{unt} 전주대비
-                    </span>
-                </div>
+                <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][0]['text']}</div>
             </div>
-
-            <!-- 하단 2x2 상세 설명 영역 -->
-            <div style="padding: 24px; background-color: #060A12; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                    <span style="color: #FF5555; font-size: 1.1rem; font-weight: 800;">📌</span>
-                    <span style="color: #FFFFFF; font-weight: 800; font-size: 1.05rem;">{selected_ind_name.split('(')[0].strip()}란?</span>
+            <!-- Card 2 -->
+            <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">{meta['cards'][1]['icon']}</span>
+                    <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][1]['title']}</span>
                 </div>
-                <div style="color: #8AAAC8; font-size: 0.9rem; line-height: 1.6; margin-bottom: 20px;">
-                    {meta['desc']}
+                <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][1]['text']}</div>
+            </div>
+            <!-- Card 3 -->
+            <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">{meta['cards'][2]['icon']}</span>
+                    <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][2]['title']}</span>
                 </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
-                    <!-- Card 1 -->
-                    <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 1.2rem;">{meta['cards'][0]['icon']}</span>
-                            <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][0]['title']}</span>
-                        </div>
-                        <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][0]['text']}</div>
-                    </div>
-                    <!-- Card 2 -->
-                    <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 1.2rem;">{meta['cards'][1]['icon']}</span>
-                            <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][1]['title']}</span>
-                        </div>
-                        <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][1]['text']}</div>
-                    </div>
-                    <!-- Card 3 -->
-                    <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 1.2rem;">{meta['cards'][2]['icon']}</span>
-                            <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][2]['title']}</span>
-                        </div>
-                        <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][2]['text']}</div>
-                    </div>
-                    <!-- Card 4 -->
-                    <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <span style="font-size: 1.2rem;">{meta['cards'][3]['icon']}</span>
-                            <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][3]['title']}</span>
-                        </div>
-                        <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][3]['text']}</div>
-                    </div>
+                <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][2]['text']}</div>
+            </div>
+            <!-- Card 4 -->
+            <div style="background-color: #0A0F18; border: 1px solid #1E2A3A; border-radius: 8px; padding: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 1.2rem;">{meta['cards'][3]['icon']}</span>
+                    <span style="color: #FFFFFF; font-weight: 700; font-size: 0.95rem;">{meta['cards'][3]['title']}</span>
                 </div>
+                <div style="color: #6B8EAE; font-size: 0.85rem; line-height: 1.6;">{meta['cards'][3]['text']}</div>
             </div>
         </div>
-        ''', unsafe_allow_html=True)
+    </div>
+</div>
+"""
+        st.markdown(detail_html, unsafe_allow_html=True)
 
     else:
         st.warning("데이터를 불러오지 못했습니다.")
