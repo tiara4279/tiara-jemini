@@ -112,62 +112,26 @@ def fetch_cnn_fng():
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (무한 로딩 원천 차단: 서킷 브레이커 & 빠른 실패 로직) ---
-@st.cache_data(ttl=3600*6) 
-def fetch_data_breaker():
-    end = datetime.datetime.today()
-    start = end - datetime.timedelta(days=365*3) 
-    
-    fred_series = {
-        'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
-        '10Y': 'DGS10', '2Y': 'DGS2',
-        'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
-        'MMF': 'WRMFNS', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB', 'EFFR': 'EFFR',                  
-        'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB',
-        'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
-    }
-    
-    # [1] FRED 데이터 초고속 3초 타임아웃 다운로드 (서킷 브레이커 탑재)
-    fred_list = []
-    fred_blocked = False # 연준 서버 차단 감지용 스위치
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"}
+# --- 개별 데이터 로드 함수 (고객님 지시사항: 한 번에 하나씩 개별 캐싱 처리) ---
+@st.cache_data(ttl=3600*6, show_spinner=False)
+def fetch_single_fred(name, series_id, start, end):
+    try:
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        # 타임아웃 3초: 안되는 지표는 3초만에 과감히 버리고 다음으로 넘어감
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
+            data = data[(data.index >= start) & (data.index <= end)]
+            data = data.rename(columns={series_id: name})
+            if not data.empty:
+                return data
+    except Exception:
+        pass
+    return pd.DataFrame()
 
-    for name, series_id in fred_series.items():
-        if fred_blocked:
-            break # 서버가 차단(429)했으면 나머지 지표는 묻지도 따지지도 않고 포기 (무한로딩 방지)
-            
-        try:
-            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-            req = urllib.request.Request(url, headers=headers)
-            # 타임아웃을 3초로 극단적으로 짧게 잡아 앱이 절대 멈추지 않게 함
-            with urllib.request.urlopen(req, timeout=3) as response:
-                data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
-                data = data[(data.index >= start) & (data.index <= end)]
-                data = data.rename(columns={series_id: name})
-                if not data.empty:
-                    fred_list.append(data)
-        except urllib.error.HTTPError as e:
-            if e.code in [403, 429]: # 디도스 방어에 걸린 경우 즉각 감지
-                fred_blocked = True
-        except Exception:
-            pass # 단순 타임아웃은 미련 없이 무시하고 다음으로 넘어감
-                
-    df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
-
-    # 단위 환산 (억 달러로 통일)
-    if 'Fed_BS' in df_fred.columns: df_fred['Fed_BS'] = df_fred['Fed_BS'] / 100
-    if 'WRESBAL_Ind' in df_fred.columns: df_fred['WRESBAL_Ind'] = df_fred['WRESBAL_Ind'] / 100
-    if 'Reserves' in df_fred.columns: df_fred['Reserves'] = df_fred['Reserves'] / 100
-    if 'TGA' in df_fred.columns: df_fred['TGA'] = df_fred['TGA'] / 100
-    if 'MMF' in df_fred.columns: df_fred['MMF'] = df_fred['MMF'] * 10
-    if 'RRP' in df_fred.columns: df_fred['RRP'] = df_fred['RRP'] * 10
-    if 'TOTLL' in df_fred.columns: df_fred['TOTLL'] = df_fred['TOTLL'] * 10 
-    if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
-    if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
-
-    # [2] 야후 파이낸스 백업 다운로드 (VIX, 10Y 등 핵심 지표 이중화)
-    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F', '^VIX', '^TNX']
-    df_yf = pd.DataFrame()
+@st.cache_data(ttl=3600*6, show_spinner=False)
+def fetch_yahoo_data(start, end):
+    tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
     try:
         yf_data = yf.download(tickers, start=start, end=end, progress=False, threads=False)
         if isinstance(yf_data.columns, pd.MultiIndex):
@@ -180,69 +144,95 @@ def fetch_data_breaker():
             '^KS11': 'KOSPI', '^KQ11': 'KOSDAQ', 'KRW=X': 'USDKRW',
             'JPY=X': 'USDJPY', 'CL=F': 'WTI',
             'EURUSD=X': 'EURUSD', 'GBPUSD=X': 'GBPUSD', 'CNY=X': 'USDCNY',
-            '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F',
-            '^VIX': 'VIX_yf', '^TNX': '10Y_yf' # 야후파이낸스 백업 지표
+            '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
         })
-        
-        # 타임존 충돌 강제 제거
         if not df_yf.empty and hasattr(df_yf.index, 'tz') and df_yf.index.tz is not None:
             df_yf.index = df_yf.index.tz_localize(None)
+        return df_yf
     except Exception:
-        pass
+        return pd.DataFrame()
 
-    # 원본 데이터 보존 및 렌더링용 채우기 (ffill)
-    df_raw = pd.concat([df_fred, df_yf], axis=1)
-    df_raw = df_raw.sort_index()
-    df_merged = df_raw.ffill().bfill().fillna(0)
+# --- 순차적 데이터 수집 및 진행 상황 시각화 ---
+def load_all_data_sequentially():
+    end = datetime.datetime.today()
+    start = end - datetime.timedelta(days=365*3) 
     
-    # [3] FRED가 막혔을 때 야후파이낸스 지표로 자동 구출 (플랜 B)
-    if 'VIX' not in df_merged.columns and 'VIX_yf' in df_merged.columns:
-        df_merged['VIX'] = df_merged['VIX_yf']
-        df_raw['VIX'] = df_raw['VIX_yf']
-    if '10Y' not in df_merged.columns and '10Y_yf' in df_merged.columns:
-        df_merged['10Y'] = df_merged['10Y_yf']
-        df_raw['10Y'] = df_raw['10Y_yf']
+    # 화면에 진행 바와 텍스트를 만들어 현재 상태를 눈으로 직접 보여줌
+    status_container = st.empty()
+    progress_bar = st.progress(0)
     
-    # --- 강건한(Robust) 데이터 계산 로직 ---
-    fed_bs = df_merged['Fed_BS'] if 'Fed_BS' in df_merged.columns else 0.0
-    rrp = df_merged['RRP'] if 'RRP' in df_merged.columns else 0.0
-    tga = df_merged['TGA'] if 'TGA' in df_merged.columns else 0.0
-    df_merged['Net_Liquidity'] = fed_bs - rrp - tga
+    # 1. 야후 파이낸스 로딩 (가장 먼저 확실히 가져옴)
+    status_container.info("🔄 1단계: 야후 파이낸스 데이터 우선 로딩 중...")
+    df_yf = fetch_yahoo_data(start, end)
+    progress_bar.progress(20)
     
-    sofr = df_merged['SOFR'] if 'SOFR' in df_merged.columns else 0.0
-    iorb = df_merged['IORB'] if 'IORB' in df_merged.columns else 0.0
-    effr = df_merged['EFFR'] if 'EFFR' in df_merged.columns else 0.0
-    df_merged['SOFR_IORB_Spread'] = sofr - iorb
-    df_merged['SOFR_EFFR_Spread'] = sofr - effr
+    # 2. 연준 데이터 개별 로딩 (한꺼번에 안 묶고 하나씩 순차 처리)
+    fred_series = {
+        'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
+        '10Y': 'DGS10', '2Y': 'DGS2',
+        'Fed_BS': 'WALCL', 'WRESBAL_Ind': 'WRESBAL', 'Reserves': 'WRESBAL', 'RRP': 'RRPONTSYD', 'TGA': 'WTREGEN',                 
+        'MMF': 'WRMFNS', 'TOTLL': 'TOTLL', 'SOFR': 'SOFR', 'IORB': 'IORB', 'EFFR': 'EFFR',                  
+        'T10YIE': 'T10YIE', 'Discount_Window': 'WLCFLPCL', 'BTFP': 'H41RESPALBFRB',
+        'ACMTP10': 'ACMTP10'
+    }
     
-    dw = df_merged['Discount_Window'] if 'Discount_Window' in df_merged.columns else 0.0
-    btfp = df_merged['BTFP'] if 'BTFP' in df_merged.columns else 0.0
-    df_merged['Emergency_Loans'] = dw + btfp
-
-    # --- 핵심! 요약 보드 그리기용(df_raw) 파생 지표 채우기 ---
-    fed_bs_raw = df_raw['Fed_BS'] if 'Fed_BS' in df_raw.columns else 0.0
-    rrp_raw = df_raw['RRP'] if 'RRP' in df_raw.columns else 0.0
-    tga_raw = df_raw['TGA'] if 'TGA' in df_raw.columns else 0.0
-    df_raw['Net_Liquidity'] = fed_bs_raw - rrp_raw - tga_raw
+    fred_list = []
+    total = len(fred_series)
+    for i, (name, sid) in enumerate(fred_series.items()):
+        # 현재 어떤 지표를 불러오는지 화면에 바로바로 출력 (막히는 곳 파악 가능)
+        status_container.info(f"🔄 2단계: 연준 데이터 순차 확인 중... [{name}] ({i+1}/{total})")
+        
+        # 개별 지표 1개 단위로 독립 실행 (실패해도 다음으로 계속 넘어감)
+        df_s = fetch_single_fred(name, sid, start, end)
+        if not df_s.empty:
+            if name in ['Fed_BS', 'WRESBAL_Ind', 'Reserves', 'TGA', 'Discount_Window', 'BTFP']:
+                df_s[name] = df_s[name] / 100
+            elif name in ['MMF', 'RRP', 'TOTLL']:
+                df_s[name] = df_s[name] * 10
+            fred_list.append(df_s)
+            
+        # 화면의 진행 바 갱신
+        progress_bar.progress(20 + int(70 * (i+1)/total))
+        
+    status_container.info("🔄 3단계: 데이터 병합 및 계산 중...")
+    df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
+    df_raw = pd.concat([df_fred, df_yf], axis=1) if not df_fred.empty or not df_yf.empty else pd.DataFrame()
+    if not df_raw.empty:
+        df_raw = df_raw.sort_index()
+        
+    df_merged = df_raw.ffill().bfill().fillna(0) if not df_raw.empty else pd.DataFrame()
     
-    sofr_raw = df_raw['SOFR'] if 'SOFR' in df_raw.columns else 0.0
-    iorb_raw = df_raw['IORB'] if 'IORB' in df_raw.columns else 0.0
-    effr_raw = df_raw['EFFR'] if 'EFFR' in df_raw.columns else 0.0
-    df_raw['SOFR_IORB_Spread'] = sofr_raw - iorb_raw
-    df_raw['SOFR_EFFR_Spread'] = sofr_raw - effr_raw
-    
-    dw_raw = df_raw['Discount_Window'] if 'Discount_Window' in df_raw.columns else 0.0
-    btfp_raw = df_raw['BTFP'] if 'BTFP' in df_raw.columns else 0.0
-    df_raw['Emergency_Loans'] = dw_raw + btfp_raw
+    # 파생 지표 계산 (가져온 데이터만 조합하여 에러 원천 차단)
+    if not df_merged.empty:
+        if 'Fed_BS' in df_merged and 'RRP' in df_merged and 'TGA' in df_merged:
+            df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
+            df_raw['Net_Liquidity'] = df_raw['Fed_BS'] - df_raw['RRP'] - df_raw['TGA']
+            
+        if 'SOFR' in df_merged and 'IORB' in df_merged:
+            df_merged['SOFR_IORB_Spread'] = df_merged['SOFR'] - df_merged['IORB']
+            df_raw['SOFR_IORB_Spread'] = df_raw['SOFR'] - df_raw['IORB']
+            
+        if 'SOFR' in df_merged and 'EFFR' in df_merged:
+            df_merged['SOFR_EFFR_Spread'] = df_merged['SOFR'] - df_merged['EFFR']
+            df_raw['SOFR_EFFR_Spread'] = df_raw['SOFR'] - df_raw['EFFR']
+            
+        if 'Discount_Window' in df_merged and 'BTFP' in df_merged:
+            df_merged['Emergency_Loans'] = df_merged['Discount_Window'] + df_merged['BTFP']
+            df_raw['Emergency_Loans'] = df_raw['Discount_Window'] + df_raw['BTFP']
+            
+    # 모든 작업이 끝나면 로딩 텍스트와 진행 바를 숨김
+    status_container.empty()
+    progress_bar.empty()
     
     return df_merged, df_raw
 
-with st.spinner('무한 로딩을 방지하며 빠르게 데이터를 가져옵니다 (최대 5초 소요)...'):
-    df, df_raw = fetch_data_breaker()
+# 데이터 로드 즉시 실행
+df, df_raw = load_all_data_sequentially()
 
-# 데이터가 비어있어도 화면이 뻗지 않고 경고창만 띄움
-if 'Net_Liquidity' not in df.columns or (df['Net_Liquidity'] == 0).all():
-    st.warning("🚨 연준(FRED) 데이터 서버가 현재 접근을 일시적으로 차단하여 유동성 관련 일부 지표가 생략되었습니다. 무한 로딩을 방지하기 위해 핵심 지수만 강제로 띄웁니다.")
+# 데이터 누락 시 안내 (앱 뻗음 방지)
+missing_cols = [c for c in ['VIX', '10Y_2Y', 'Fed_BS'] if c not in df.columns]
+if missing_cols:
+    st.warning(f"🚨 현재 서버 접속 지연으로 일부 지표({', '.join(missing_cols)} 등)가 누락되었습니다. 무한 로딩 방지를 위해 안 되는 지표는 건너뛰고 정상 출력했습니다.")
 
 # --- 다크 모드용 형광색 테마 설정 ---
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
