@@ -100,28 +100,31 @@ def fetch_cnn_fng():
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
             "Accept": "application/json, text/plain, */*",
             "Referer": "https://edition.cnn.com/",
             "Origin": "https://edition.cnn.com",
         }
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=3) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode('utf-8'))
             return int(round(data['fear_and_greed']['score']))
     except Exception:
         return None
 
-# --- 개별 데이터 로드 함수 (고객님 지시사항: 한 번에 하나씩 개별 캐싱 처리) ---
+# --- 개별 데이터 로드 함수 (문자열 직렬화, 타임아웃 10초, 인코딩 해결 적용) ---
 @st.cache_data(ttl=3600*6, show_spinner=False)
-def fetch_single_fred(name, series_id, start, end):
+def fetch_single_fred(name, series_id, start_str, end_str):
     try:
         url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        # 타임아웃 3초: 안되는 지표는 3초만에 과감히 버리고 다음으로 넘어감
-        with urllib.request.urlopen(req, timeout=3) as response:
-            data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
-            data = data[(data.index >= start) & (data.index <= end)]
+        # 타임아웃 10초로 연장하여 연준 서버 지연 방어
+        with urllib.request.urlopen(req, timeout=10) as response:
+            # 바이트 인코딩 이슈를 해결하기 위해 직접 decode 후 StringIO 사용
+            csv_data = response.read().decode('utf-8')
+            data = pd.read_csv(StringIO(csv_data), index_col='DATE', parse_dates=True, na_values=['.', ''])
+            # 문자열 날짜를 다시 변환하여 필터링
+            data = data[(data.index >= pd.to_datetime(start_str)) & (data.index <= pd.to_datetime(end_str))]
             data = data.rename(columns={series_id: name})
             if not data.empty:
                 return data
@@ -130,14 +133,24 @@ def fetch_single_fred(name, series_id, start, end):
     return pd.DataFrame()
 
 @st.cache_data(ttl=3600*6, show_spinner=False)
-def fetch_yahoo_data(start, end):
+def fetch_yahoo_data(start_str, end_str):
     tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
     try:
-        yf_data = yf.download(tickers, start=start, end=end, progress=False, threads=False)
+        yf_data = yf.download(tickers, start=start_str, end=end_str, progress=False, threads=False)
+        
+        # yfinance 최신 버전 MultiIndex 컬럼 파싱 오류 완벽 대응
         if isinstance(yf_data.columns, pd.MultiIndex):
-            df_yf = yf_data['Close'] if 'Close' in yf_data.columns.levels[0] else yf_data
+            try:
+                df_yf = yf_data['Close']
+            except KeyError:
+                if 'Close' in yf_data.columns.get_level_values(0):
+                    df_yf = yf_data.xs('Close', level=0, axis=1)
+                elif 'Close' in yf_data.columns.get_level_values(1):
+                    df_yf = yf_data.xs('Close', level=1, axis=1)
+                else:
+                    df_yf = yf_data
         else:
-            df_yf = yf_data['Close'] if 'Close' in yf_data.columns else yf_data
+            df_yf = yf_data[['Close']] if 'Close' in yf_data.columns else yf_data
             
         df_yf = df_yf.rename(columns={
             '^GSPC': 'SP500', '^MOVE': 'MOVE', 'DX-Y.NYB': 'DXY', 
@@ -146,27 +159,29 @@ def fetch_yahoo_data(start, end):
             'EURUSD=X': 'EURUSD', 'GBPUSD=X': 'GBPUSD', 'CNY=X': 'USDCNY',
             '^IXIC': 'NASDAQ', 'ES=F': 'ES_F', 'NQ=F': 'NQ_F'
         })
+        
         if not df_yf.empty and hasattr(df_yf.index, 'tz') and df_yf.index.tz is not None:
             df_yf.index = df_yf.index.tz_localize(None)
         return df_yf
     except Exception:
         return pd.DataFrame()
 
-# --- 순차적 데이터 수집 및 진행 상황 시각화 ---
+# --- 순차적 데이터 수집 및 견고한 데이터 파생 로직 ---
 def load_all_data_sequentially():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
-    # 화면에 진행 바와 텍스트를 만들어 현재 상태를 눈으로 직접 보여줌
+    # st.cache_data 직렬화 오류 방지를 위해 날짜를 문자열로 변환
+    start_str = start.strftime('%Y-%m-%d')
+    end_str = end.strftime('%Y-%m-%d')
+    
     status_container = st.empty()
     progress_bar = st.progress(0)
     
-    # 1. 야후 파이낸스 로딩 (가장 먼저 확실히 가져옴)
     status_container.info("🔄 1단계: 야후 파이낸스 데이터 우선 로딩 중...")
-    df_yf = fetch_yahoo_data(start, end)
+    df_yf = fetch_yahoo_data(start_str, end_str)
     progress_bar.progress(20)
     
-    # 2. 연준 데이터 개별 로딩 (한꺼번에 안 묶고 하나씩 순차 처리)
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
         '10Y': 'DGS10', '2Y': 'DGS2',
@@ -179,11 +194,8 @@ def load_all_data_sequentially():
     fred_list = []
     total = len(fred_series)
     for i, (name, sid) in enumerate(fred_series.items()):
-        # 현재 어떤 지표를 불러오는지 화면에 바로바로 출력 (막히는 곳 파악 가능)
-        status_container.info(f"🔄 2단계: 연준 데이터 순차 확인 중... [{name}] ({i+1}/{total})")
-        
-        # 개별 지표 1개 단위로 독립 실행 (실패해도 다음으로 계속 넘어감)
-        df_s = fetch_single_fred(name, sid, start, end)
+        status_container.info(f"🔄 2단계: 연준(FRED) 데이터 안전 수집 중... [{name}] ({i+1}/{total})")
+        df_s = fetch_single_fred(name, sid, start_str, end_str)
         if not df_s.empty:
             if name in ['Fed_BS', 'WRESBAL_Ind', 'Reserves', 'TGA', 'Discount_Window', 'BTFP']:
                 df_s[name] = df_s[name] / 100
@@ -191,10 +203,9 @@ def load_all_data_sequentially():
                 df_s[name] = df_s[name] * 10
             fred_list.append(df_s)
             
-        # 화면의 진행 바 갱신
         progress_bar.progress(20 + int(70 * (i+1)/total))
         
-    status_container.info("🔄 3단계: 데이터 병합 및 계산 중...")
+    status_container.info("🔄 3단계: 데이터 병합 및 매크로 지표 연산 중...")
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
     df_raw = pd.concat([df_fred, df_yf], axis=1) if not df_fred.empty or not df_yf.empty else pd.DataFrame()
     if not df_raw.empty:
@@ -202,25 +213,33 @@ def load_all_data_sequentially():
         
     df_merged = df_raw.ffill().bfill().fillna(0) if not df_raw.empty else pd.DataFrame()
     
-    # 파생 지표 계산 (가져온 데이터만 조합하여 에러 원천 차단)
+    # [핵심] BTFP 폐지 및 일부 누락 지표로 인한 KeyError를 막기 위한 강건한 연산 로직 (df.get 활용)
     if not df_merged.empty:
-        if 'Fed_BS' in df_merged and 'RRP' in df_merged and 'TGA' in df_merged:
-            df_merged['Net_Liquidity'] = df_merged['Fed_BS'] - df_merged['RRP'] - df_merged['TGA']
-            df_raw['Net_Liquidity'] = df_raw['Fed_BS'] - df_raw['RRP'] - df_raw['TGA']
+        # Net Liquidity
+        if 'Fed_BS' in df_merged:
+            fed_bs = df_merged.get('Fed_BS', pd.Series(0, index=df_merged.index))
+            rrp = df_merged.get('RRP', pd.Series(0, index=df_merged.index))
+            tga = df_merged.get('TGA', pd.Series(0, index=df_merged.index))
+            df_merged['Net_Liquidity'] = fed_bs - rrp - tga
+            df_raw['Net_Liquidity'] = df_raw.get('Fed_BS', 0) - df_raw.get('RRP', 0) - df_raw.get('TGA', 0)
             
-        if 'SOFR' in df_merged and 'IORB' in df_merged:
-            df_merged['SOFR_IORB_Spread'] = df_merged['SOFR'] - df_merged['IORB']
-            df_raw['SOFR_IORB_Spread'] = df_raw['SOFR'] - df_raw['IORB']
+        # SOFR Spreads
+        if 'SOFR' in df_merged:
+            sofr = df_merged.get('SOFR', pd.Series(0, index=df_merged.index))
+            iorb = df_merged.get('IORB', pd.Series(0, index=df_merged.index))
+            effr = df_merged.get('EFFR', pd.Series(0, index=df_merged.index))
+            df_merged['SOFR_IORB_Spread'] = sofr - iorb
+            df_raw['SOFR_IORB_Spread'] = df_raw.get('SOFR', 0) - df_raw.get('IORB', 0)
+            df_merged['SOFR_EFFR_Spread'] = sofr - effr
+            df_raw['SOFR_EFFR_Spread'] = df_raw.get('SOFR', 0) - df_raw.get('EFFR', 0)
             
-        if 'SOFR' in df_merged and 'EFFR' in df_merged:
-            df_merged['SOFR_EFFR_Spread'] = df_merged['SOFR'] - df_merged['EFFR']
-            df_raw['SOFR_EFFR_Spread'] = df_raw['SOFR'] - df_raw['EFFR']
+        # Emergency Loans (BTFP가 폐지되어 누락되더라도 문제없이 합산되도록 처리)
+        if 'Discount_Window' in df_merged or 'BTFP' in df_merged:
+            dw = df_merged.get('Discount_Window', pd.Series(0, index=df_merged.index))
+            btfp = df_merged.get('BTFP', pd.Series(0, index=df_merged.index))
+            df_merged['Emergency_Loans'] = dw + btfp
+            df_raw['Emergency_Loans'] = df_raw.get('Discount_Window', 0) + df_raw.get('BTFP', 0)
             
-        if 'Discount_Window' in df_merged and 'BTFP' in df_merged:
-            df_merged['Emergency_Loans'] = df_merged['Discount_Window'] + df_merged['BTFP']
-            df_raw['Emergency_Loans'] = df_raw['Discount_Window'] + df_raw['BTFP']
-            
-    # 모든 작업이 끝나면 로딩 텍스트와 진행 바를 숨김
     status_container.empty()
     progress_bar.empty()
     
@@ -229,7 +248,6 @@ def load_all_data_sequentially():
 # 데이터 로드 즉시 실행
 df, df_raw = load_all_data_sequentially()
 
-# 데이터 누락 시 안내 (앱 뻗음 방지)
 missing_cols = [c for c in ['VIX', '10Y_2Y', 'Fed_BS'] if c not in df.columns]
 if missing_cols:
     st.warning(f"🚨 현재 서버 접속 지연으로 일부 지표({', '.join(missing_cols)} 등)가 누락되었습니다. 무한 로딩 방지를 위해 안 되는 지표는 건너뛰고 정상 출력했습니다.")
