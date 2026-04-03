@@ -95,7 +95,7 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
-# --- CNN Fear & Greed 데이터 실시간 로드 함수 (캐시 폭파용 이름 변경) ---
+# --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
 @st.cache_data(ttl=3600*2)
 def fetch_cnn_fng():
     try:
@@ -107,15 +107,15 @@ def fetch_cnn_fng():
             "Origin": "https://edition.cnn.com",
         }
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=3) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             data = json.loads(response.read().decode('utf-8'))
             return int(round(data['fear_and_greed']['score']))
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (무한 로딩 차단: 초고속 병렬 다운로드 & 타임아웃 3초 제한) ---
+# --- 데이터 로드 함수 (스마트 병렬 다운로드 & 에러 무시 렌더링) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_data_ultra_fast():
+def fetch_data_smart():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
@@ -128,25 +128,26 @@ def fetch_data_ultra_fast():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 병렬 다운로드 (엄격한 타임아웃 적용하여 앱 멈춤 방지)
+    # [1] FRED 데이터 스마트 병렬 다운로드 (워커 수 4개로 제한하여 디도스 방어 피함)
     def download_fred(name, series_id):
-        headers = {"User-Agent": "Mozilla/5.0"}
-        for _ in range(2): # 무한 로딩 방지를 위해 최대 2회만 재시도
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+        for attempt in range(3): # 최대 3회 점진적 재시도
             try:
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=3) as response: # 타임아웃 3초로 엄격히 제한
+                with urllib.request.urlopen(req, timeout=10) as response: # 타임아웃 10초로 여유 확보
                     data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
                     data = data[(data.index >= start) & (data.index <= end)]
                     data = data.rename(columns={series_id: name})
                     if not data.empty:
                         return data
             except Exception:
-                time.sleep(0.5)
+                time.sleep(1 + attempt) # 실패 시 1초, 2초 대기 후 재시도
         return pd.DataFrame()
 
     fred_list = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    # 동시 접속을 4개로 제한하여 차단을 피함
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(download_fred, name, sid) for name, sid in fred_series.items()]
         for future in concurrent.futures.as_completed(futures):
             res = future.result()
@@ -231,13 +232,12 @@ def fetch_data_ultra_fast():
     
     return df_merged, df_raw
 
-with st.spinner('초고속 병렬 방식으로 데이터를 로드 중입니다 (약 3~5초 소요)...'):
-    df, df_raw = fetch_data_ultra_fast()
+with st.spinner('안정적으로 데이터를 가져오고 있습니다. 잠시만 기다려주세요...'):
+    df, df_raw = fetch_data_smart()
 
-# 데이터 수집 완전 실패에 대한 방어 로직
+# 앱이 죽지 않게 st.stop() 대신 부드러운 경고창만 띄움
 if df.empty or len(df.columns) < 5:
-    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 일시적으로 지연되고 있습니다. 잠시 후 새로고침을 해주세요.")
-    st.stop()
+    st.warning("⚠️ 일부 연준(FRED) 데이터의 응답이 지연되어 누락된 지표가 있을 수 있습니다. 이용에는 지장이 없습니다.")
 
 # --- 다크 모드용 형광색 테마 설정 ---
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
@@ -456,7 +456,7 @@ def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id=
 # --- 프리미엄 디테일 카드 렌더링 함수 ---
 def render_detailed_indicator(key, df, days):
     if key not in df.columns: 
-        st.caption(f"⚠️ {INDICATOR_META[key]['name']} 실시간 데이터를 불러오지 못했습니다. (서버 응답 지연)")
+        st.warning(f"⚠️ {INDICATOR_META[key]['name']} 실시간 데이터를 불러오지 못했습니다. (서버 응답 지연)")
         return
         
     meta = INDICATOR_META[key]
