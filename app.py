@@ -30,7 +30,7 @@ install_missing()
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import datetime
+from datetime import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
@@ -280,7 +280,6 @@ def card(label, val_str, chg=None, sub="", badge=""):
         {delta_html(chg)}{s}
     </div>"""
 
-# [수정포인트] 이모지가 알파벳(US 등)으로 깨지는 현상을 방지하기 위해 icon에 text-transform: none 적용
 def sec(icon, title):
     st.markdown(f'<div class="sec-hd"><span style="text-transform: none;">{icon}</span>&nbsp;&nbsp;{title}</div>', unsafe_allow_html=True)
 
