@@ -915,11 +915,14 @@ else:
 </div>""", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
-# §10  리스크 지표 상세 분석
+# §10  리스크 지표 상세 분석 (전체 나열)
 # ──────────────────────────────────────────────
+import plotly.graph_objects as go
+import pandas as pd
+
 st.markdown("---")
 st.markdown("## 🔬 리스크 지표 상세 분석")
-st.markdown("지표를 선택하면 상세 분석 및 현재 상태를 확인할 수 있습니다.")
+st.markdown("12개 지표를 순서대로 확인하세요.")
 
 # ── hex to rgba 변환 함수 ──
 def hex_to_rgba(hex_color, alpha=0.08):
@@ -929,144 +932,292 @@ def hex_to_rgba(hex_color, alpha=0.08):
     b = int(hex_color[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
-# ── 지표 정의 ──
-RISK_INDICATORS = {
-    "VIX 공포지수": {
+# ── 상태 스타일 ──
+STATUS_STYLE = {
+    "safe":    {"bg": "#064e3b", "border": "#10b981", "icon": "✅", "text": "#6ee7b7", "label": "안   전"},
+    "caution": {"bg": "#1c1917", "border": "#f59e0b", "icon": "🟡", "text": "#fcd34d", "label": "보   통"},
+    "warning": {"bg": "#431407", "border": "#f97316", "icon": "⚠️",  "text": "#fb923c", "label": "주   의"},
+    "danger":  {"bg": "#450a0a", "border": "#ef4444", "icon": "🔴", "text": "#fca5a5", "label": "심   각"},
+}
+
+# ── 지표 전체 정의 ──
+RISK_INDICATORS = [
+    {
+        "name": "① VIX 공포지수",
         "yf_ticker": "^VIX",
         "fred_id": None,
+        "color": "#ef4444",
+        "unit": "",
+        "period": "2y",
         "description": """
 **VIX (CBOE Volatility Index)** 는 S&P 500 옵션 시장에서 도출된 **향후 30일 주식 시장의 예상 변동성 지수**입니다.
-일명 **"공포 지수(Fear Index)"** 라고 불리며, 투자자들의 불안 심리를 수치화한 것입니다.
+일명 **"공포 지수(Fear Index)"** 라고 불리며, 투자자들의 불안 심리를 수치화합니다.
 
-- **VIX는 주가와 역의 상관관계**: 주가가 급락할수록 VIX는 급등
-- **실시간 심리 반영**: 옵션 프리미엄을 통해 시장 참여자들의 공포/탐욕 수준 파악
-- **글로벌 위기 선행지표**: 금융 위기, 코로나, 금리 쇼크 등에서 급등
+- **주가와 역의 상관관계**: 주가 급락 시 VIX 급등
+- **실시간 심리 반영**: 투자자들의 공포/탐욕 수준 파악
+- **글로벌 위기 선행지표**: 금융위기, 코로나, 금리쇼크 시 급등
         """,
-        "thresholds": {
-            "safe":    (0, 15),
-            "caution": (15, 25),
-            "warning": (25, 35),
-            "danger":  (35, 9999),
-        },
+        "thresholds": {"safe":(0,15),"caution":(15,25),"warning":(25,35),"danger":(35,9999)},
         "threshold_labels": {
             "safe":    "안정 — 시장이 매우 차분하고 낙관적입니다.",
             "caution": "보통 — 정상 범위이나 약간의 불확실성 존재.",
             "warning": "주의 ⚠️ — 시장 변동성 확대 구간. 방어적 포지션 고려.",
             "danger":  "심각 🔴 — 공포 확산! 과거 위기 수준. 현금 비중 확대 권고.",
         },
-        "color": "#ef4444",
-        "unit": "",
-        "period": "2y",
     },
-    "MOVE 채권변동성": {
+    {
+        "name": "② MOVE 채권변동성",
         "yf_ticker": None,
         "fred_id": "ICBMRATE",
+        "color": "#f59e0b",
+        "unit": "",
+        "period": "2y",
         "description": """
-**MOVE Index (Merrill Lynch Option Volatility Estimate)** 는 **미국 국채 시장의 내재 변동성 지수**입니다.
-채권판 VIX라고도 불리며, 금리 시장의 불확실성을 나타냅니다.
+**MOVE Index** 는 **미국 국채 시장의 내재 변동성 지수**입니다. 채권판 VIX라고 불립니다.
 
 - **MOVE 상승 = 금리 불확실성 확대**: 연준 정책 불투명, 인플레이션 우려
-- **채권·주식 동반 위험 신호**: MOVE와 VIX가 동시에 상승하면 복합 위기
-- **은행 시스템 스트레스와 연동**: 2023년 실리콘밸리 은행 사태 시 급등
+- **채권·주식 동반 위험 신호**: MOVE + VIX 동시 상승 = 복합 위기
+- **은행 시스템 스트레스 연동**: 2023년 SVB 사태 시 급등
         """,
-        "thresholds": {
-            "safe":    (0, 80),
-            "caution": (80, 120),
-            "warning": (120, 160),
-            "danger":  (160, 9999),
-        },
+        "thresholds": {"safe":(0,80),"caution":(80,120),"warning":(120,160),"danger":(160,9999)},
         "threshold_labels": {
             "safe":    "안정 — 채권 시장 안정적.",
             "caution": "보통 — 금리 불확실성 다소 존재.",
             "warning": "주의 ⚠️ — 채권 변동성 확대. 듀레이션 리스크 주의.",
             "danger":  "심각 🔴 — 채권 시장 극도의 불안. 금융 시스템 위기 가능성.",
         },
-        "color": "#f59e0b",
+    },
+    {
+        "name": "③ 장단기 금리차 (10Y-2Y)",
+        "yf_ticker": None,
+        "fred_id": "T10Y2Y",
+        "color": "#3b82f6",
+        "unit": "%",
+        "period": "2y",
+        "description": """
+**장단기 금리차 (10Y-2Y)** 는 **미국 10년물 국채금리에서 2년물 국채금리를 뺀 값**입니다.
+경기 침체 예측에 있어 가장 신뢰도 높은 지표 중 하나입니다.
+
+- **마이너스(역전) = 경기침체 경고**: 역사적으로 침체 전 항상 역전 발생
+- **플러스 복귀 = 침체 임박 신호**: 역전 해소 시점이 오히려 더 위험
+- **연준 정책 방향성 반영**: 금리차 축소 = 긴축 영향 증가
+        """,
+        "thresholds": {"danger":(-9999,0),"warning":(0,0.5),"caution":(0.5,1.5),"safe":(1.5,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — 금리 역전! 경기 침체 강력 경고 신호.",
+            "warning": "주의 ⚠️ — 금리차 매우 좁음. 경기 둔화 가능성.",
+            "caution": "보통 — 정상 범위 하단. 모니터링 필요.",
+            "safe":    "안정 — 금리차 정상. 경기 확장 국면.",
+        },
+    },
+    {
+        "name": "④ HYG (하이일드 ETF)",
+        "yf_ticker": "HYG",
+        "fred_id": None,
+        "color": "#ec4899",
         "unit": "",
         "period": "2y",
+        "description": """
+**HYG (iShares iBoxx High Yield Corporate Bond ETF)** 는 **미국 하이일드(정크) 채권을 추종하는 ETF**입니다.
+기업 신용 시장의 건전성을 가장 빠르게 파악할 수 있는 지표입니다.
+
+- **가격 하락 = 신용 위험 증가**: 기업 부도 우려 반영
+- **주식 시장 선행**: HYG 급락은 주식 하락에 선행하는 경향
+- **유동성 위기 바로미터**: 금융 스트레스 증가 시 빠르게 반응
+        """,
+        "thresholds": {"danger":(-9999,73),"warning":(73,77),"caution":(77,81),"safe":(81,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — HYG 급락! 신용 시장 위기 상태.",
+            "warning": "주의 ⚠️ — 신용 시장 압박. 기업 부도 위험 증가.",
+            "caution": "보통 — 소폭 약세. 주의 모니터링 필요.",
+            "safe":    "안정 — 하이일드 시장 건전.",
+        },
     },
-    "HY OAS 신용스프레드": {
+    {
+        "name": "⑤ HY OAS 신용스프레드",
         "yf_ticker": None,
         "fred_id": "BAMLH0A0HYM2",
+        "color": "#8b5cf6",
+        "unit": "%",
+        "period": "2y",
         "description": """
-**HY OAS (High Yield Option-Adjusted Spread)** 는 **하이일드(정크) 채권과 미국 국채 간의 금리 차이**입니다.
+**HY OAS (High Yield Option-Adjusted Spread)** 는 **하이일드 채권과 미국 국채 간의 금리 차이**입니다.
 기업 신용 리스크와 경기 침체 우려를 나타내는 핵심 지표입니다.
 
 - **스프레드 확대 = 신용 위험 증가**: 기업 부도 우려 상승
-- **경기 침체 선행지표**: 경기 침체 수개월 전부터 확대되는 경향
+- **경기 침체 선행지표**: 침체 수개월 전부터 확대 경향
 - **유동성 경색 시그널**: 금융위기 시 10%+ 급등
         """,
-        "thresholds": {
-            "safe":    (0, 3.5),
-            "caution": (3.5, 5.5),
-            "warning": (5.5, 8.0),
-            "danger":  (8.0, 9999),
-        },
+        "thresholds": {"safe":(0,3.5),"caution":(3.5,5.5),"warning":(5.5,8.0),"danger":(8.0,9999)},
         "threshold_labels": {
             "safe":    "안정 — 기업 신용 시장 건전.",
             "caution": "보통 — 신용 위험 소폭 상승. 주시 필요.",
             "warning": "주의 ⚠️ — 신용 스프레드 확대. 기업 부도 리스크 증가.",
             "danger":  "심각 🔴 — 신용 위기 경보! 경기 침체 가능성 매우 높음.",
         },
-        "color": "#8b5cf6",
+    },
+    {
+        "name": "⑥ 연준 총자산 (대차대조표)",
+        "yf_ticker": None,
+        "fred_id": "WALCL",
+        "color": "#06b6d4",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**연준 총자산 (Fed Balance Sheet)** 은 **연방준비제도의 보유 자산 총액**입니다.
+양적완화(QE)와 양적긴축(QT)을 통해 시장 유동성에 직접 영향을 미칩니다.
+
+- **자산 증가(QE) = 유동성 공급**: 시장 친화적, 위험자산 상승 압력
+- **자산 감소(QT) = 유동성 흡수**: 시장 긴축, 자산 가격 하방 압력
+- **경제 위기 시 급팽창**: 코로나 시 9조달러까지 확대
+        """,
+        "thresholds": {"danger":(-9999,4000),"warning":(4000,6000),"caution":(6000,7500),"safe":(7500,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — 연준 자산 급감. 강력 긴축 국면.",
+            "warning": "주의 ⚠️ — QT 진행 중. 유동성 감소.",
+            "caution": "보통 — 안정적 QT 범위.",
+            "safe":    "안정 — 유동성 충분. QE 효과 유지.",
+        },
+    },
+    {
+        "name": "⑦ 지급준비금 잔고",
+        "yf_ticker": None,
+        "fred_id": "WRESBAL",
+        "color": "#10b981",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**지급준비금 잔고 (Reserve Balances)** 는 **시중 은행이 연준에 예치한 지급준비금 총액**입니다.
+금융 시스템의 유동성 완충 역할을 하는 핵심 지표입니다.
+
+- **잔고 감소 = 유동성 긴장**: 은행 간 자금 조달 압박 증가
+- **레포 시장 스트레스 연동**: 준비금 부족 시 단기금리 급등 발생
+- **QT 한계 지표**: 준비금이 과도하게 줄면 연준은 QT 중단 가능성
+        """,
+        "thresholds": {"danger":(-9999,2500),"warning":(2500,3000),"caution":(3000,3500),"safe":(3500,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — 준비금 급감! 유동성 위기 임박.",
+            "warning": "주의 ⚠️ — 준비금 부족 경계선. QT 속도 조절 필요.",
+            "caution": "보통 — 준비금 적정 하단.",
+            "safe":    "안정 — 준비금 충분. 시스템 유동성 안정.",
+        },
+    },
+    {
+        "name": "⑧ TGA (재무부 일반계정)",
+        "yf_ticker": None,
+        "fred_id": "WTREGEN",
+        "color": "#f97316",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**TGA (Treasury General Account)** 는 **미국 재무부가 연준에 보유한 운영 계좌**입니다.
+재무부의 자금 조달 상태와 시장 유동성에 직접적인 영향을 미칩니다.
+
+- **TGA 증가 = 시장 유동성 흡수**: 국채 발행 → 시장 자금이 TGA로 이동
+- **TGA 감소 = 유동성 공급**: 재정 지출 → 시장으로 자금 방출
+- **부채한도 협상과 연동**: 한도 도달 시 TGA 급감 후 합의 후 급증
+        """,
+        "thresholds": {"danger":(-9999,200),"warning":(200,400),"caution":(400,700),"safe":(700,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — TGA 바닥! 부채한도 위기 또는 재정 고갈.",
+            "warning": "주의 ⚠️ — TGA 낮음. 국채 발행 압박 또는 재정 위기.",
+            "caution": "보통 — TGA 정상 하단. 모니터링 필요.",
+            "safe":    "안정 — TGA 충분. 재정 운영 여유.",
+        },
+    },
+    {
+        "name": "⑨ 역레포 (ON RRP)",
+        "yf_ticker": None,
+        "fred_id": "RRPONTSYD",
+        "color": "#a78bfa",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**역레포 (Overnight Reverse Repurchase, ON RRP)** 는 **연준이 MMF 등으로부터 하룻밤 자금을 빌리는 거래**입니다.
+시장의 초과 유동성을 측정하는 지표입니다.
+
+- **역레포 증가 = 시장 초과 유동성 과잉**: 갈 곳 없는 자금이 연준에 주차
+- **역레포 감소 = 유동성 흡수 진행**: QT 효과 나타남, 정상화 신호
+- **급감 = 주의**: 너무 빠른 감소는 유동성 부족 전환 가능성
+        """,
+        "thresholds": {"safe":(-9999,500),"caution":(500,1000),"warning":(1000,2000),"danger":(2000,9999)},
+        "threshold_labels": {
+            "safe":    "안정 — 역레포 낮음. 초과 유동성 정상화.",
+            "caution": "보통 — 역레포 중간. 여전히 유동성 풍부.",
+            "warning": "주의 ⚠️ — 역레포 높음. 시장 초과 유동성 과잉.",
+            "danger":  "심각 🔴 — 역레포 극대! 시장 유동성 왜곡 심각.",
+        },
+    },
+    {
+        "name": "⑩ MMF 총잔고",
+        "yf_ticker": None,
+        "fred_id": "MMMFFAQ027S",
+        "color": "#34d399",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**MMF 총잔고 (Money Market Fund Total Assets)** 는 **머니마켓펀드에 유입된 총 자산 규모**입니다.
+투자자들의 위험 회피 성향과 시장 대기 자금을 나타냅니다.
+
+- **MMF 증가 = 위험 회피**: 주식/채권에서 안전자산으로 자금 이동
+- **대기 자금 규모**: 향후 시장 재진입 가능한 잠재 수요
+- **금리 환경 반영**: 고금리 시 MMF 매력도 상승으로 자금 유입
+        """,
+        "thresholds": {"safe":(-9999,4500),"caution":(4500,5500),"warning":(5500,6500),"danger":(6500,9999)},
+        "threshold_labels": {
+            "safe":    "안정 — MMF 정상 수준. 시장 위험 선호.",
+            "caution": "보통 — MMF 소폭 증가. 일부 위험 회피.",
+            "warning": "주의 ⚠️ — MMF 급증. 시장 불안 심리 확산.",
+            "danger":  "심각 🔴 — MMF 사상 최고! 극단적 위험 회피 상태.",
+        },
+    },
+    {
+        "name": "⑪ 은행 대출 잔고",
+        "yf_ticker": None,
+        "fred_id": "TOTLL",
+        "color": "#fb7185",
+        "unit": "B$",
+        "period": "2y",
+        "description": """
+**은행 대출 잔고 (Total Loans and Leases)** 는 **미국 상업은행의 총 대출 및 리스 잔액**입니다.
+실물 경제 신용 공급과 경기 활력을 측정하는 핵심 지표입니다.
+
+- **대출 증가 = 경기 확장**: 기업·가계 신용 수요 증가, 투자 활성화
+- **대출 감소 = 경기 수축**: 신용 경색, 경기 침체 신호
+- **금리 민감도**: 고금리 시 대출 수요 감소 → 경기 둔화
+        """,
+        "thresholds": {"danger":(-9999,11000),"warning":(11000,12000),"caution":(12000,13000),"safe":(13000,9999)},
+        "threshold_labels": {
+            "danger":  "심각 🔴 — 대출 급감! 신용 경색 및 경기 침체 신호.",
+            "warning": "주의 ⚠️ — 대출 감소세. 경기 둔화 가능성.",
+            "caution": "보통 — 대출 성장 둔화. 모니터링 필요.",
+            "safe":    "안정 — 대출 성장 양호. 실물 경제 건전.",
+        },
+    },
+    {
+        "name": "⑫ SOFR (익일물 금리)",
+        "yf_ticker": None,
+        "fred_id": "SOFR",
+        "color": "#fbbf24",
         "unit": "%",
         "period": "2y",
-    },
-    "VVIX (VIX의 변동성)": {
-        "yf_ticker": "^VVIX",
-        "fred_id": None,
         "description": """
-**VVIX (CBOE VVIX Index)** 는 **VIX 자체의 변동성**을 측정하는 지수입니다.
-즉, "공포지수의 공포지수"로, 시장 불안의 2차 증폭 현상을 포착합니다.
+**SOFR (Secured Overnight Financing Rate)** 는 **미국 국채 담보 익일물 금리**입니다.
+LIBOR를 대체하는 달러 단기 기준금리로, 금융 시스템의 단기 자금 조달 비용을 반영합니다.
 
-- **VVIX 급등 = VIX 급변 예고**: 조만간 VIX가 크게 움직일 가능성
-- **꼬리 위험(Tail Risk) 지표**: 극단적 시장 움직임 가능성을 나타냄
-- **옵션 시장 구조 변화 반영**: 헤지 수요 급증 시 먼저 반응
+- **연준 기준금리와 연동**: 기준금리 상단에 근접하여 움직임
+- **급등 = 단기 유동성 경색**: 레포 시장 스트레스 신호
+- **스프레드 확대 주목**: 기준금리 대비 SOFR 급등 시 시스템 리스크
         """,
-        "thresholds": {
-            "safe":    (0, 90),
-            "caution": (90, 110),
-            "warning": (110, 130),
-            "danger":  (130, 9999),
-        },
+        "thresholds": {"safe":(0,2.5),"caution":(2.5,4.0),"warning":(4.0,5.5),"danger":(5.5,9999)},
         "threshold_labels": {
-            "safe":    "안정 — 변동성 시장 안정.",
-            "caution": "보통 — 변동성 확대 가능성 다소 존재.",
-            "warning": "주의 ⚠️ — VIX 급변 가능성. 옵션 헤지 수요 증가.",
-            "danger":  "심각 🔴 — 극단적 변동성 폭발 임박 가능성!",
+            "safe":    "안정 — 저금리 환경. 유동성 풍부.",
+            "caution": "보통 — 중립 금리 수준.",
+            "warning": "주의 ⚠️ — 고금리 유지. 자금 조달 부담 증가.",
+            "danger":  "심각 🔴 — 초고금리! 단기 자금 경색 위험.",
         },
-        "color": "#06b6d4",
-        "unit": "",
-        "period": "2y",
     },
-    "STLFSI 금융스트레스": {
-        "yf_ticker": None,
-        "fred_id": "STLFSI4",
-        "description": """
-**St. Louis Fed Financial Stress Index (STLFSI)** 는 **미국 금융 시스템 전반의 스트레스 수준**을 나타내는 지수입니다.
-18개 금융 시장 변수를 종합하여 주간 단위로 발표합니다.
-
-- **0 기준**: 0보다 낮으면 정상 이하 스트레스, 높으면 정상 이상 스트레스
-- **포괄적 측정**: 금리, 스프레드, 주가, 유동성 등 다양한 변수 반영
-- **연준 정책 판단 지표**: 연준이 실제로 활용하는 공식 지표
-        """,
-        "thresholds": {
-            "safe":    (-9999, -0.5),
-            "caution": (-0.5, 0.5),
-            "warning": (0.5, 1.5),
-            "danger":  (1.5, 9999),
-        },
-        "threshold_labels": {
-            "safe":    "안정 — 금융 시스템 스트레스 매우 낮음.",
-            "caution": "보통 — 정상 범위 내 스트레스.",
-            "warning": "주의 ⚠️ — 금융 스트레스 상승. 시장 경계 필요.",
-            "danger":  "심각 🔴 — 금융 시스템 극심한 스트레스! 위기 단계.",
-        },
-        "color": "#10b981",
-        "unit": "",
-        "period": "2y",
-    },
-}
+]
 
 # ── 상태 판정 함수 ──
 def get_risk_status(value, thresholds, labels):
@@ -1075,296 +1226,220 @@ def get_risk_status(value, thresholds, labels):
             return key, labels[key]
     return "caution", "데이터 범위 초과"
 
-STATUS_STYLE = {
-    "safe":    {"bg": "#064e3b", "border": "#10b981", "icon": "✅", "text": "#6ee7b7", "label": "안   전"},
-    "caution": {"bg": "#1c1917", "border": "#f59e0b", "icon": "🟡", "text": "#fcd34d", "label": "보   통"},
-    "warning": {"bg": "#431407", "border": "#f97316", "icon": "⚠️",  "text": "#fb923c", "label": "주   의"},
-    "danger":  {"bg": "#450a0a", "border": "#ef4444", "icon": "🔴", "text": "#fca5a5", "label": "심   각"},
-}
+# ── 각 지표 순서대로 렌더링 ──
+for idx, info in enumerate(RISK_INDICATORS):
 
-# ── 지표 선택 버튼 ──
-st.markdown("### 📌 지표 선택")
+    st.markdown("---")
+    st.markdown(f"### {info['name']}")
 
-if "selected_risk" not in st.session_state:
-    st.session_state["selected_risk"] = "VIX 공포지수"
+    # ── 데이터 로딩 ──
+    detail_data = None
+    load_error  = None
 
-cols_btn = st.columns(5)
-indicator_names = list(RISK_INDICATORS.keys())
-for i, name in enumerate(indicator_names):
-    with cols_btn[i]:
-        is_selected = st.session_state["selected_risk"] == name
-        if st.button(
-            f"{'🔵 ' if is_selected else ''}{name}",
-            key=f"risk_btn_{i}",
-            use_container_width=True,
-            type="primary" if is_selected else "secondary",
-        ):
-            st.session_state["selected_risk"] = name
-            st.rerun()
+    try:
+        if info.get("yf_ticker"):
+            import yfinance as yf
+            raw = yf.Ticker(info["yf_ticker"]).history(period=info["period"])
+            if not raw.empty:
+                detail_data = raw["Close"].dropna()
+                detail_data.index = detail_data.index.tz_localize(None)
+        elif info.get("fred_id"):
+            fred_obj  = Fred(api_key=FRED_API_KEY)
+            end_dt    = datetime.today()
+            start_dt  = end_dt - timedelta(days=730)
+            raw = fred_obj.get_series(
+                info["fred_id"],
+                observation_start=start_dt,
+                observation_end=end_dt,
+            )
+            if raw is not None and not raw.empty:
+                detail_data = raw.dropna()
+    except Exception as e:
+        load_error = str(e)
 
-# ── 선택된 지표 로드 ──
-selected = st.session_state["selected_risk"]
-info = RISK_INDICATORS[selected]
+    # ── 현재값 & 상태 ──
+    current_val  = None
+    status_key   = "caution"
+    status_label = "데이터 없음"
+    change       = 0.0
 
-st.markdown("---")
-st.markdown(f"## 🔎 {selected} 상세 분석")
-
-# ── 데이터 로딩 ──
-detail_data = None
-load_error = None
-
-try:
-    if info.get("yf_ticker"):
-        import yfinance as yf
-        ticker_obj = yf.Ticker(info["yf_ticker"])
-        raw = ticker_obj.history(period=info["period"])
-        if not raw.empty:
-            detail_data = raw["Close"].dropna()
-            detail_data.index = detail_data.index.tz_localize(None)
-    elif info.get("fred_id"):
-        fred_detail = Fred(api_key=FRED_API_KEY)
-        end_dt = datetime.today()
-        start_dt = end_dt - timedelta(days=730)
-        raw = fred_detail.get_series(
-            info["fred_id"],
-            observation_start=start_dt,
-            observation_end=end_dt
-        )
-        if raw is not None and not raw.empty:
-            detail_data = raw.dropna()
-except Exception as e:
-    load_error = str(e)
-
-# ── 현재값 및 상태 판정 ──
-current_val = None
-status_key  = "caution"
-status_label = "데이터 없음"
-change = 0.0
-change_pct = 0.0
-
-if detail_data is not None and len(detail_data) > 0:
-    current_val  = float(detail_data.iloc[-1])
-    prev_val     = float(detail_data.iloc[-2]) if len(detail_data) > 1 else current_val
-    change       = current_val - prev_val
-    change_pct   = (change / prev_val * 100) if prev_val != 0 else 0
-    status_key, status_label = get_risk_status(current_val, info["thresholds"], info["threshold_labels"])
-
-style = STATUS_STYLE[status_key]
-
-# ── 통계 계산 ──
-if detail_data is not None and len(detail_data) > 0:
-    val_min    = float(detail_data.min())
-    val_max    = float(detail_data.max())
-    val_avg    = float(detail_data.mean())
-    percentile = float((detail_data <= current_val).mean() * 100)
-else:
-    val_min = val_max = val_avg = percentile = 0.0
-
-unit_str      = info["unit"]
-val_display   = f"{current_val:.2f}{unit_str}" if current_val is not None else "N/A"
-change_display = f"{change:+.2f}" if current_val is not None else "-"
-change_color  = "#ef4444" if change > 0 else "#10b981"
-
-# ── 상태 카드 HTML ──
-status_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-  * {{ margin:0; padding:0; box-sizing:border-box; }}
-  body {{ background:transparent; font-family:'Segoe UI',sans-serif; padding:10px 0; }}
-  .wrapper {{ display:flex; gap:14px; flex-wrap:wrap; }}
-  .status-card {{
-    flex:1.5; min-width:200px;
-    background:{style['bg']};
-    border:2px solid {style['border']};
-    border-radius:14px; padding:22px;
-    text-align:center;
-  }}
-  .s-icon  {{ font-size:44px; margin-bottom:10px; }}
-  .s-label {{ font-size:24px; font-weight:900; color:{style['text']}; letter-spacing:4px; margin-bottom:8px; }}
-  .s-desc  {{ font-size:13px; color:#9ca3af; line-height:1.6; }}
-  .metric-card {{
-    flex:1; min-width:120px;
-    background:#1f2937;
-    border:1px solid #374151;
-    border-radius:12px; padding:16px;
-    text-align:center;
-  }}
-  .m-title {{ font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }}
-  .m-value {{ font-size:24px; font-weight:800; color:#f9fafb; }}
-  .m-sub   {{ font-size:12px; margin-top:4px; color:#6b7280; }}
-</style>
-</head>
-<body>
-<div class="wrapper">
-  <div class="status-card">
-    <div class="s-icon">{style['icon']}</div>
-    <div class="s-label">{style['label']}</div>
-    <div class="s-desc">{status_label}</div>
-  </div>
-  <div class="metric-card">
-    <div class="m-title">현재 값</div>
-    <div class="m-value">{val_display}</div>
-    <div class="m-sub" style="color:{change_color};">{change_display} 전일비</div>
-  </div>
-  <div class="metric-card">
-    <div class="m-title">2년 최저</div>
-    <div class="m-value">{val_min:.2f}</div>
-    <div class="m-sub">Low</div>
-  </div>
-  <div class="metric-card">
-    <div class="m-title">2년 최고</div>
-    <div class="m-value">{val_max:.2f}</div>
-    <div class="m-sub">High</div>
-  </div>
-  <div class="metric-card">
-    <div class="m-title">2년 평균</div>
-    <div class="m-value">{val_avg:.2f}</div>
-    <div class="m-sub">Avg</div>
-  </div>
-  <div class="metric-card">
-    <div class="m-title">백분위</div>
-    <div class="m-value" style="color:{style['text']};">{percentile:.0f}%</div>
-    <div class="m-sub">2년 기준</div>
-  </div>
-</div>
-</body>
-</html>
-"""
-components.html(status_html, height=160, scrolling=False)
-
-# ── 큰 상세 그래프 ──
-if detail_data is not None and len(detail_data) > 0:
-    import plotly.graph_objects as go
-
-    df_detail = detail_data.reset_index()
-    df_detail.columns = ["Date", "Value"]
-
-    th = info["thresholds"]
-
-    fig_detail = go.Figure()
-
-    # 배경 구간 색상
-    zone_colors = {
-        "safe":    "rgba(16,185,129,0.07)",
-        "caution": "rgba(245,158,11,0.07)",
-        "warning": "rgba(249,115,22,0.10)",
-        "danger":  "rgba(239,68,68,0.12)",
-    }
-
-    y_data_min = float(df_detail["Value"].min())
-    y_data_max = float(df_detail["Value"].max())
-    y_padding  = abs(y_data_max - y_data_min) * 0.1
-
-    x_min = df_detail["Date"].min()
-    x_max = df_detail["Date"].max()
-
-    for zone, (z_low, z_high) in th.items():
-        y0 = z_low  if z_low  > -900 else y_data_min - y_padding
-        y1 = z_high if z_high < 9000 else y_data_max + y_padding
-        if y0 >= y1:
-            continue
-        fig_detail.add_shape(
-            type="rect",
-            xref="x", yref="y",
-            x0=x_min, x1=x_max,
-            y0=y0, y1=y1,
-            fillcolor=zone_colors[zone],
-            line_width=0,
-            layer="below",
+    if detail_data is not None and len(detail_data) > 0:
+        current_val  = float(detail_data.iloc[-1])
+        prev_val     = float(detail_data.iloc[-2]) if len(detail_data) > 1 else current_val
+        change       = current_val - prev_val
+        status_key, status_label = get_risk_status(
+            current_val, info["thresholds"], info["threshold_labels"]
         )
 
-    # 메인 라인 + 면적
-    fig_detail.add_trace(go.Scatter(
-        x=df_detail["Date"],
-        y=df_detail["Value"],
-        mode="lines",
-        name=selected,
-        line=dict(color=info["color"], width=2.5),
-        fill="tozeroy",
-        fillcolor=hex_to_rgba(info["color"], 0.08),
-        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>값: %{y:.2f}<extra></extra>",
-    ))
+    style = STATUS_STYLE[status_key]
 
-    # 현재값 수평선
-    if current_val is not None:
-        fig_detail.add_hline(
-            y=current_val,
-            line_dash="dot",
-            line_color=style["border"],
-            line_width=1.8,
-            annotation_text=f"  현재: {current_val:.2f}",
-            annotation_position="right",
-            annotation_font_color=style["text"],
-            annotation_font_size=13,
-        )
-
-    # threshold 기준선
-    th_line_colors = {
-        "safe":    "#10b981",
-        "caution": "#f59e0b",
-        "warning": "#f97316",
-        "danger":  "#ef4444",
-    }
-    drawn = set()
-    for zone, (z_low, z_high) in th.items():
-        for th_val in [z_low, z_high]:
-            if -900 < th_val < 9000 and th_val not in drawn:
-                fig_detail.add_hline(
-                    y=th_val,
-                    line_dash="dash",
-                    line_color=th_line_colors[zone],
-                    line_width=1,
-                    opacity=0.45,
-                )
-                drawn.add(th_val)
-
-    fig_detail.update_layout(
-        height=520,
-        margin=dict(l=10, r=80, t=60, b=40),
-        paper_bgcolor="#111827",
-        plot_bgcolor="#111827",
-        font=dict(color="#d1d5db", size=13),
-        title=dict(
-            text=f"<b>{selected}</b> — 최근 2년 추이",
-            font=dict(size=20, color="#f9fafb"),
-            x=0.01,
-        ),
-        xaxis=dict(
-            gridcolor="#1f2937",
-            showgrid=True,
-            zeroline=False,
-            tickfont=dict(size=12),
-        ),
-        yaxis=dict(
-            gridcolor="#1f2937",
-            showgrid=True,
-            zeroline=False,
-            tickfont=dict(size=12),
-        ),
-        hovermode="x unified",
-        showlegend=False,
-    )
-
-    st.plotly_chart(fig_detail, use_container_width=True)
-
-else:
-    if load_error:
-        st.error(f"❌ 데이터 로드 실패: `{load_error}`")
+    # ── 통계 ──
+    if detail_data is not None and len(detail_data) > 0:
+        val_min    = float(detail_data.min())
+        val_max    = float(detail_data.max())
+        val_avg    = float(detail_data.mean())
+        percentile = float((detail_data <= current_val).mean() * 100)
     else:
-        st.warning("⚠️ 데이터를 불러오지 못했습니다. FRED API 키 또는 네트워크를 확인하세요.")
+        val_min = val_max = val_avg = percentile = 0.0
 
-# ── 지표 설명 ──
-with st.expander("📖 지표 상세 설명 보기", expanded=True):
+    unit_str       = info["unit"]
+    val_display    = f"{current_val:.2f}{unit_str}" if current_val is not None else "N/A"
+    change_display = f"{change:+.2f}" if current_val is not None else "-"
+    change_color   = "#ef4444" if change > 0 else "#10b981"
+
+    # ── 상태 카드 ──
+    status_html = f"""
+    <!DOCTYPE html><html><head>
+    <style>
+      * {{ margin:0; padding:0; box-sizing:border-box; }}
+      body {{ background:transparent; font-family:'Segoe UI',sans-serif; padding:8px 0; }}
+      .wrapper {{ display:flex; gap:12px; flex-wrap:wrap; }}
+      .status-card {{
+        flex:1.5; min-width:190px;
+        background:{style['bg']};
+        border:2px solid {style['border']};
+        border-radius:14px; padding:20px; text-align:center;
+      }}
+      .s-icon  {{ font-size:42px; margin-bottom:8px; }}
+      .s-label {{ font-size:22px; font-weight:900; color:{style['text']}; letter-spacing:4px; margin-bottom:6px; }}
+      .s-desc  {{ font-size:13px; color:#9ca3af; line-height:1.5; }}
+      .mc {{
+        flex:1; min-width:110px;
+        background:#1f2937; border:1px solid #374151;
+        border-radius:12px; padding:14px; text-align:center;
+      }}
+      .mt {{ font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }}
+      .mv {{ font-size:22px; font-weight:800; color:#f9fafb; }}
+      .ms {{ font-size:12px; margin-top:4px; color:#6b7280; }}
+    </style></head><body>
+    <div class="wrapper">
+      <div class="status-card">
+        <div class="s-icon">{style['icon']}</div>
+        <div class="s-label">{style['label']}</div>
+        <div class="s-desc">{status_label}</div>
+      </div>
+      <div class="mc">
+        <div class="mt">현재 값</div>
+        <div class="mv">{val_display}</div>
+        <div class="ms" style="color:{change_color};">{change_display} 전일비</div>
+      </div>
+      <div class="mc">
+        <div class="mt">2년 최저</div>
+        <div class="mv">{val_min:.2f}</div>
+        <div class="ms">Low</div>
+      </div>
+      <div class="mc">
+        <div class="mt">2년 최고</div>
+        <div class="mv">{val_max:.2f}</div>
+        <div class="ms">High</div>
+      </div>
+      <div class="mc">
+        <div class="mt">2년 평균</div>
+        <div class="mv">{val_avg:.2f}</div>
+        <div class="ms">Avg</div>
+      </div>
+      <div class="mc">
+        <div class="mt">백분위</div>
+        <div class="mv" style="color:{style['text']};">{percentile:.0f}%</div>
+        <div class="ms">2년 기준</div>
+      </div>
+    </div>
+    </body></html>
+    """
+    components.html(status_html, height=155, scrolling=False)
+
+    # ── 그래프 ──
+    if detail_data is not None and len(detail_data) > 0:
+        df_d = detail_data.reset_index()
+        df_d.columns = ["Date", "Value"]
+
+        th   = info["thresholds"]
+        fig  = go.Figure()
+
+        zone_colors = {
+            "safe":    "rgba(16,185,129,0.07)",
+            "caution": "rgba(245,158,11,0.07)",
+            "warning": "rgba(249,115,22,0.10)",
+            "danger":  "rgba(239,68,68,0.12)",
+        }
+
+        y_min = float(df_d["Value"].min())
+        y_max = float(df_d["Value"].max())
+        y_pad = abs(y_max - y_min) * 0.1
+        x_min = df_d["Date"].min()
+        x_max = df_d["Date"].max()
+
+        for zone, (z_low, z_high) in th.items():
+            y0 = z_low  if z_low  > -900  else y_min - y_pad
+            y1 = z_high if z_high < 9000  else y_max + y_pad
+            if y0 >= y1:
+                continue
+            fig.add_shape(
+                type="rect", xref="x", yref="y",
+                x0=x_min, x1=x_max, y0=y0, y1=y1,
+                fillcolor=zone_colors[zone], line_width=0, layer="below",
+            )
+
+        fig.add_trace(go.Scatter(
+            x=df_d["Date"], y=df_d["Value"],
+            mode="lines", name=info["name"],
+            line=dict(color=info["color"], width=2.5),
+            fill="tozeroy",
+            fillcolor=hex_to_rgba(info["color"], 0.08),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>값: %{y:.2f}<extra></extra>",
+        ))
+
+        if current_val is not None:
+            fig.add_hline(
+                y=current_val,
+                line_dash="dot", line_color=style["border"], line_width=1.8,
+                annotation_text=f"  현재: {current_val:.2f}",
+                annotation_position="right",
+                annotation_font_color=style["text"],
+                annotation_font_size=13,
+            )
+
+        th_line_colors = {
+            "safe":"#10b981","caution":"#f59e0b","warning":"#f97316","danger":"#ef4444"
+        }
+        drawn = set()
+        for zone, (z_low, z_high) in th.items():
+            for tv in [z_low, z_high]:
+                if -900 < tv < 9000 and tv not in drawn:
+                    fig.add_hline(
+                        y=tv, line_dash="dash",
+                        line_color=th_line_colors[zone],
+                        line_width=1, opacity=0.45,
+                    )
+                    drawn.add(tv)
+
+        fig.update_layout(
+            height=480,
+            margin=dict(l=10, r=80, t=55, b=40),
+            paper_bgcolor="#111827", plot_bgcolor="#111827",
+            font=dict(color="#d1d5db", size=13),
+            title=dict(
+                text=f"<b>{info['name']}</b> — 최근 2년 추이",
+                font=dict(size=18, color="#f9fafb"), x=0.01,
+            ),
+            xaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False, tickfont=dict(size=12)),
+            yaxis=dict(gridcolor="#1f2937", showgrid=True, zeroline=False, tickfont=dict(size=12)),
+            hovermode="x unified", showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        if load_error:
+            st.error(f"❌ 데이터 로드 실패: `{load_error}`")
+        else:
+            st.warning("⚠️ 데이터를 불러오지 못했습니다.")
+
+    # ── 지표 설명 ──
     st.markdown(info["description"])
 
-    st.markdown("#### 📊 단계별 판정 기준")
+    st.markdown("**📊 단계별 판정 기준**")
     status_emojis = {
-        "safe":    "✅ 안전",
-        "caution": "🟡 보통",
-        "warning": "⚠️ 주의",
-        "danger":  "🔴 심각",
+        "safe":"✅ 안전","caution":"🟡 보통","warning":"⚠️ 주의","danger":"🔴 심각"
     }
     th_rows = []
     for zone, (z_low, z_high) in info["thresholds"].items():
@@ -1375,7 +1450,6 @@ with st.expander("📖 지표 상세 설명 보기", expanded=True):
             "범위": f"{low_str} ~ {high_str}{info['unit']}",
             "의미": info["threshold_labels"][zone],
         })
-    import pandas as pd
     st.table(pd.DataFrame(th_rows))
 
 
