@@ -2,12 +2,14 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import datetime
-import time
 import plotly.graph_objects as plotly_go
 from plotly.subplots import make_subplots
 import numpy as np
-import urllib.request
 import json
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from io import StringIO
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
@@ -94,29 +96,37 @@ selected_period_label = st.radio("기간", list(period_options.keys()), index=4,
 selected_days = period_options[selected_period_label]
 st.write("")
 
+# --- HTTP 세션 및 재시도 설정 (FRED 서버 안정성 확보) ---
+@st.cache_resource
+def get_requests_session():
+    session = requests.Session()
+    # 429(Too Many Requests), 500, 502, 503, 504 에러 발생 시 자동으로 점진적 재시도
+    retry = Retry(connect=3, read=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    return session
+
 # --- CNN Fear & Greed 데이터 실시간 로드 함수 ---
 @st.cache_data(ttl=3600*2)
 def fetch_cnn_fng():
     try:
         url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Referer": "https://edition.cnn.com/",
-            "Origin": "https://edition.cnn.com",
-        }
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            return int(round(data['fear_and_greed']['score']))
+        session = get_requests_session()
+        response = session.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        return int(round(data['fear_and_greed']['score']))
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (가장 안전한 정석 순차 다운로드 방식 - 무한로딩/차단 원천방지) ---
+# --- 데이터 로드 함수 (Requests 라이브러리를 활용한 견고한 다운로드) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_data_v4():
+def fetch_data_robust():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
+    session = get_requests_session()
     
     fred_series = {
         'VIX': 'VIXCLS', 'HY_Spread': 'BAMLH0A0HYM2', 'FSI': 'STLFSI4', '10Y_2Y': 'T10Y2Y',
@@ -127,31 +137,21 @@ def fetch_data_v4():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 정석 순차 다운로드 (서버를 자극하지 않는 안전한 방식)
+    # [1] FRED 데이터 안정적 순차 다운로드 (지수 백오프 세션 활용)
     fred_list = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
-    
     for name, series_id in fred_series.items():
-        success = False
-        for attempt in range(3): # 최대 3번 시도
-            try:
-                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-                req = urllib.request.Request(url, headers=headers)
-                # timeout을 5초로 짧게 주어 멈춤(Hang)을 방지
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
-                    data = data[(data.index >= start) & (data.index <= end)]
-                    data = data.rename(columns={series_id: name})
-                    if not data.empty:
-                        fred_list.append(data)
-                        success = True
-                        break # 성공하면 즉시 다음 지표로 넘어감
-            except Exception:
-                time.sleep(0.5) # 에러 시 0.5초만 숨고르기 후 재시도
-        
-        # 무자비한 차단을 피하기 위해 각 지표마다 0.2초의 매너 타임(휴식) 부여
-        if success:
-            time.sleep(0.2)
+        try:
+            url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+            response = session.get(url, timeout=7)
+            response.raise_for_status()
+            
+            data = pd.read_csv(StringIO(response.text), index_col='DATE', parse_dates=True, na_values=['.', ''])
+            data = data[(data.index >= start) & (data.index <= end)]
+            data = data.rename(columns={series_id: name})
+            if not data.empty:
+                fred_list.append(data)
+        except Exception:
+            pass 
                 
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
@@ -166,7 +166,7 @@ def fetch_data_v4():
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
     if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
 
-    # [2] 야후 파이낸스 데이터 다운로드 (안정적인 threads=False 모드)
+    # [2] 야후 파이낸스 데이터 다운로드
     tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
     df_yf = pd.DataFrame()
     try:
@@ -231,12 +231,12 @@ def fetch_data_v4():
     
     return df_merged, df_raw
 
-with st.spinner('안전한 순차 방식으로 데이터를 로드 중입니다 (약 8~10초 소요). 잠시만 기다려주세요...'):
-    df, df_raw = fetch_data_v4()
+with st.spinner('FRED 연준 서버와 안전하게 연결하여 데이터를 가져오고 있습니다...'):
+    df, df_raw = fetch_data_robust()
 
-# 데이터 수집 완전 실패에 대한 방어 로직
+# 데이터 수집 실패에 대한 방어 로직
 if df.empty or len(df.columns) < 5:
-    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 지연되고 있습니다. 잠시 후 새로고침을 해주세요.")
+    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 연준(FRED) 서버에서 현재 접근을 제한하고 있습니다. 몇 분 후 다시 접속해주세요.")
     st.stop()
 
 # --- 다크 모드용 형광색 테마 설정 ---
@@ -437,7 +437,7 @@ def make_diff_str(cur, prev, unit='', invert=False, period='전일 대비'):
     if abs(diff) < 0.001: return "변동 없음", color
     return f"{arrow} {val_str} {period}", color
 
-# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기 (연노랑 텍스트 및 줄바꿈 완전 제거)
+# SaaS 스타일의 앵커 링크 연결 미니 카드 생성기
 def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id="", is_highlight=False):
     diff_text, diff_color = diff_data
     bg_color = hex_to_rgba(diff_color, 0.15) if diff_color.startswith('#') else "rgba(148,163,184,0.15)"
@@ -821,7 +821,6 @@ if all(c in df_raw.columns for c in req_cols):
     v_dxy = get_last_two(df_raw['DXY'])
     v_10y = get_last_two(df_raw['10Y'])
     v_wti = get_last_two(df_raw['WTI'])
-    v_jpy = get_last_two(df_raw['USDJPY'])
     
     # [2] 유동성을 좌우하는 핵심 창구 그룹 데이터 추출
     v_fed = get_last_two(df_raw['Fed_BS'], 1/10000) # Trillion 단위 변환
