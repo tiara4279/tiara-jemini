@@ -8,7 +8,6 @@ from plotly.subplots import make_subplots
 import numpy as np
 import urllib.request
 import json
-import concurrent.futures
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="Global Macro & Liquidity Dashboard", layout="wide")
@@ -113,9 +112,9 @@ def fetch_cnn_fng():
     except Exception:
         return None
 
-# --- 데이터 로드 함수 (스마트 병렬 다운로드 & 에러 무시 렌더링) ---
+# --- 데이터 로드 함수 (가장 안전한 정석 순차 다운로드 방식 - 무한로딩/차단 원천방지) ---
 @st.cache_data(ttl=3600*6) 
-def fetch_data_smart():
+def fetch_data_v4():
     end = datetime.datetime.today()
     start = end - datetime.timedelta(days=365*3) 
     
@@ -128,31 +127,31 @@ def fetch_data_smart():
         'ACMTP10': 'ACMTP10'  # NY Fed 기간 프리미엄
     }
     
-    # [1] FRED 데이터 스마트 병렬 다운로드 (워커 수 4개로 제한하여 디도스 방어 피함)
-    def download_fred(name, series_id):
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
-        for attempt in range(3): # 최대 3회 점진적 재시도
+    # [1] FRED 데이터 정석 순차 다운로드 (서버를 자극하지 않는 안전한 방식)
+    fred_list = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+    
+    for name, series_id in fred_series.items():
+        success = False
+        for attempt in range(3): # 최대 3번 시도
             try:
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=10) as response: # 타임아웃 10초로 여유 확보
+                # timeout을 5초로 짧게 주어 멈춤(Hang)을 방지
+                with urllib.request.urlopen(req, timeout=5) as response:
                     data = pd.read_csv(response, index_col='DATE', parse_dates=True, na_values=['.', ''])
                     data = data[(data.index >= start) & (data.index <= end)]
                     data = data.rename(columns={series_id: name})
                     if not data.empty:
-                        return data
+                        fred_list.append(data)
+                        success = True
+                        break # 성공하면 즉시 다음 지표로 넘어감
             except Exception:
-                time.sleep(1 + attempt) # 실패 시 1초, 2초 대기 후 재시도
-        return pd.DataFrame()
-
-    fred_list = []
-    # 동시 접속을 4개로 제한하여 차단을 피함
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(download_fred, name, sid) for name, sid in fred_series.items()]
-        for future in concurrent.futures.as_completed(futures):
-            res = future.result()
-            if not res.empty:
-                fred_list.append(res)
+                time.sleep(0.5) # 에러 시 0.5초만 숨고르기 후 재시도
+        
+        # 무자비한 차단을 피하기 위해 각 지표마다 0.2초의 매너 타임(휴식) 부여
+        if success:
+            time.sleep(0.2)
                 
     df_fred = pd.concat(fred_list, axis=1) if fred_list else pd.DataFrame()
 
@@ -167,7 +166,7 @@ def fetch_data_smart():
     if 'Discount_Window' in df_fred.columns: df_fred['Discount_Window'] = df_fred['Discount_Window'] / 100
     if 'BTFP' in df_fred.columns: df_fred['BTFP'] = df_fred['BTFP'] / 100
 
-    # [2] 야후 파이낸스 데이터 다운로드 (threads=False로 설정하여 yfinance 내부 병목 현상 차단)
+    # [2] 야후 파이낸스 데이터 다운로드 (안정적인 threads=False 모드)
     tickers = ['^GSPC', '^MOVE', 'DX-Y.NYB', '^KS11', '^KQ11', 'KRW=X', 'JPY=X', 'CL=F', 'EURUSD=X', 'GBPUSD=X', 'CNY=X', '^IXIC', 'ES=F', 'NQ=F']
     df_yf = pd.DataFrame()
     try:
@@ -232,12 +231,13 @@ def fetch_data_smart():
     
     return df_merged, df_raw
 
-with st.spinner('안정적으로 데이터를 가져오고 있습니다. 잠시만 기다려주세요...'):
-    df, df_raw = fetch_data_smart()
+with st.spinner('안전한 순차 방식으로 데이터를 로드 중입니다 (약 8~10초 소요). 잠시만 기다려주세요...'):
+    df, df_raw = fetch_data_v4()
 
-# 앱이 죽지 않게 st.stop() 대신 부드러운 경고창만 띄움
+# 데이터 수집 완전 실패에 대한 방어 로직
 if df.empty or len(df.columns) < 5:
-    st.warning("⚠️ 일부 연준(FRED) 데이터의 응답이 지연되어 누락된 지표가 있을 수 있습니다. 이용에는 지장이 없습니다.")
+    st.error("🚨 주요 경제 지표 데이터를 가져오지 못했습니다. 금융 서버(Yahoo, FRED)의 응답이 지연되고 있습니다. 잠시 후 새로고침을 해주세요.")
+    st.stop()
 
 # --- 다크 모드용 형광색 테마 설정 ---
 COLOR_SAFE = "#4ade80"   # 긍정/안정 (라이트 그린)
@@ -456,7 +456,7 @@ def render_mini_card(title, val_str, diff_data, footer, accent_color, target_id=
 # --- 프리미엄 디테일 카드 렌더링 함수 ---
 def render_detailed_indicator(key, df, days):
     if key not in df.columns: 
-        st.warning(f"⚠️ {INDICATOR_META[key]['name']} 실시간 데이터를 불러오지 못했습니다. (서버 응답 지연)")
+        st.warning(f"⚠️ {INDICATOR_META[key]['name']} 데이터를 아직 불러오지 못했습니다. 잠시 후 새로고침 해주세요.")
         return
         
     meta = INDICATOR_META[key]
