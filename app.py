@@ -11,6 +11,7 @@
 #  ✅ import 중복 제거
 #  ✅ 폰트 색상 전체 밝게 조정 (짙은 회색 → 밝은 회색)
 #  ✅ CHART_LAYOUT yaxis 충돌 방지
+#  ✅ 스크롤 시 배경색 끊김(투명화) 현상 해결 및 전체 배경톤 통일
 # ============================================================
 import subprocess, sys, warnings
 warnings.filterwarnings("ignore")
@@ -231,16 +232,13 @@ STATUS_STYLE = {
 }
 
 # ═══════════════════════════════════════════════════════════
-#  CSS 스타일 (폰트 색상 전체 밝게 조정)
+#  CSS 스타일 (전체 앱 배경 통일 및 폰트 색상 조정)
 # ═══════════════════════════════════════════════════════════
 st.markdown("""<style>
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;600;700;900&display=swap");
 
 /* ══════════════════════════════════════
-   스크롤 강제 활성화 (핵심)
-   Streamlit은 내부적으로 여러 div에
-   overflow:hidden / height:100vh 를 걸어
-   스크롤을 막음 → 모두 해제
+   스크롤 강제 활성화 및 배경색 전체 통일
 ══════════════════════════════════════ */
 html, body {
     overflow: auto !important;
@@ -248,21 +246,22 @@ html, body {
     min-height: 100% !important;
 }
 
-/* Streamlit 루트 컨테이너들 높이/overflow 해제 */
-#root,
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewBlockContainer"],
-[data-testid="stMain"],
-[data-testid="stMain"] > div,
-[data-testid="block-container"],
-.main,
-.main > div {
+/* Streamlit의 모든 루트 컨테이너 배경색을 하나로 통일 (스크롤 시 끊김 방지) */
+html, body, #root, .stApp, 
+[data-testid="stAppViewContainer"], 
+[data-testid="stAppViewBlockContainer"], 
+[data-testid="stMain"], 
+.main {
+    background-color: #060A12 !important;
     overflow: visible !important;
     overflow-y: visible !important;
     height: auto !important;
     max-height: none !important;
     min-height: 0 !important;
+}
+
+[data-testid="stHeader"] {
+    background: transparent !important;
 }
 
 /* 스크롤바 커스텀 (Webkit) */
@@ -279,7 +278,7 @@ html, body, [class*="css"], .stMarkdown, .stText, p, span, div, label {
     font-family: 'Noto Sans KR', sans-serif !important;
     color: #D8ECF8 !important;
 }
-.stApp { background: #060A12 !important; }
+
 .block-container { padding-top: 2rem !important; max-width: 1400px; }
 
 h1 {
@@ -486,7 +485,6 @@ with r1:
     spark(h, "#EF4444", 85)
 
 with r2:
-    # ✅ 수정: MOVE 지수는 FRED 미지원 → yfinance ^MOVE 사용
     v, chg, h = get_yf("^MOVE", "6mo", "1d")
     st.markdown(card("MOVE (채권 변동성)", f(v, 2), chg, "ICE BofA 채권 변동성", risk_badge("MOVE", v)), unsafe_allow_html=True)
     spark(h, "#F59E0B", 85)
@@ -530,13 +528,12 @@ if hy is not None and len(hy) > 0:
 
 # ═══════════════════════════════════════════════════════════
 #  §5  유동성 핵심 창구
-#  ✅ 수정: 지급준비금 ID WRBWFRBL → WRESBAL 로 통일
 # ═══════════════════════════════════════════════════════════
 sec("🏦", "유동성을 좌우하는 핵심 창구 (연준)")
 
 LIQ = [
     ("WALCL",   "연준 총자산 (대차대조표)", "#3B82F6"),   # 단위: M$
-    ("WRESBAL", "지급준비금 잔고",           "#10B981"),   # 단위: B$  ✅ 통일
+    ("WRESBAL", "지급준비금 잔고",           "#10B981"),   # 단위: B$
     ("WTREGEN", "TGA (재무부 일반계정)",     "#F59E0B"),   # 단위: M$
 ]
 l1, l2, l3 = st.columns(3)
@@ -547,7 +544,6 @@ for col, (sid, label, color) in zip([l1, l2, l3], LIQ):
             lv  = float(data.iloc[-1])
             pv  = float(data.iloc[-2]) if len(data) > 1 else lv
             chg = (lv - pv) / abs(pv) * 100 if pv != 0 else 0
-            # WALCL, WTREGEN: M$ → T$ / WRESBAL: B$ → T$
             if sid in ("WALCL", "WTREGEN"):
                 display_val = f(lv / 1_000_000.0, 2, suf=" T$")
             else:
@@ -560,13 +556,12 @@ for col, (sid, label, color) in zip([l1, l2, l3], LIQ):
 
 # ═══════════════════════════════════════════════════════════
 #  §6  은행 신용 및 단기 자금 시장
-#  ✅ 수정: MMF MMMFFAQ027S → WRMFSL (주간, §10과 통일)
 # ═══════════════════════════════════════════════════════════
 sec("💰", "은행 신용 및 단기 자금 시장")
 
 CRED = [
     ("RRPONTSYD", "역레포 (ON RRP)",   "#EC4899", "%",  1),
-    ("WRMFSL",    "MMF 총잔고",         "#06B6D4", "B$", 1),   # ✅ 수정
+    ("WRMFSL",    "MMF 총잔고",         "#06B6D4", "B$", 1),
     ("TOTLL",     "상업은행 총대출",    "#8B5CF6", "B$", 1),
     ("SOFR",      "SOFR (익일물 금리)", "#F59E0B", "%",  3),
 ]
@@ -730,7 +725,6 @@ with tab4:
 
 # ═══════════════════════════════════════════════════════════
 #  §9  Net Liquidity
-#  ✅ 수정: 지급준비금 WRBWFRBL → WRESBAL / 단위 통일 / 캐시 재사용
 # ═══════════════════════════════════════════════════════════
 sec("🌊", "미국 핵심 유동성 흐름 (Net Liquidity)")
 st.caption("Net Liquidity와 주식 시장(S&P 500)의 상관관계를 파악합니다.")
@@ -809,7 +803,6 @@ if _data_ok:
                 ),
                 secondary_y=True,
             )
-            # ✅ CHART_LAYOUT 적용 후 secondary_y 별도 설정 (충돌 방지)
             liq_layout = {k: v for k, v in CHART_LAYOUT.items() if k != "yaxis"}
             fig_liq.update_layout(**liq_layout, title_text="Net Liquidity vs S&P 500 (최근 1년)")
             fig_liq.update_yaxes(
@@ -919,13 +912,6 @@ else:
 
 # ═══════════════════════════════════════════════════════════
 #  §10  리스크 지표 상세 분석
-#  ✅ 수정 목록:
-#    - MOVE: fred_id "ICBMRATE" 삭제 → yf_ticker "^MOVE" 사용
-#    - 지급준비금: "WRESBAL" (§5와 통일)
-#    - MMF: "MMMFFAQ027S" → "WRMFSL" (§6과 통일, 주간)
-#    - Fred 객체 중복 생성 제거 → 상단 fred 재사용
-#    - 데이터 로딩: get_fred_range / get_yf 캐시 함수 재사용
-#    - TGA 임계값: B$ 기준 (WTREGEN M$ → /1000 변환 후 비교)
 # ═══════════════════════════════════════════════════════════
 st.markdown("---")
 st.markdown("## 🔬 리스크 지표 상세 분석")
@@ -951,7 +937,7 @@ RISK_INDICATORS = [
     },
     {
         "name": "② MOVE 채권변동성",
-        "yf_ticker": "^MOVE",          # ✅ 수정: FRED 미지원 → yfinance
+        "yf_ticker": "^MOVE",
         "fred_id": None,
         "color": "#f59e0b",
         "unit": "",
@@ -1037,10 +1023,10 @@ RISK_INDICATORS = [
     {
         "name": "⑦ 지급준비금 잔고",
         "yf_ticker": None,
-        "fred_id": "WRESBAL",          # ✅ 수정: §5와 동일한 ID
+        "fred_id": "WRESBAL",
         "color": "#10b981",
         "unit": "B$",
-        "fred_unit_divisor": 1,        # WRESBAL 단위가 이미 B$
+        "fred_unit_divisor": 1,
         "period": "2y",
         "description": "**지급준비금 잔고 (Reserve Balances)** 는 **시중 은행이 연준에 예치한 지급준비금 총액**입니다.\n- **잔고 감소 = 유동성 긴장**\n- **레포 시장 스트레스 연동**\n- **QT 한계 지표**",
         "thresholds": {"danger": (-9999, 2500), "warning": (2500, 3000), "caution": (3000, 3500), "safe": (3500, 9999)},
@@ -1057,7 +1043,7 @@ RISK_INDICATORS = [
         "fred_id": "WTREGEN",
         "color": "#f97316",
         "unit": "B$",
-        "fred_unit_divisor": 1000,    # ✅ 수정: M$ → B$ 변환, 임계값 B$ 기준
+        "fred_unit_divisor": 1000,
         "period": "2y",
         "description": "**TGA (Treasury General Account)** 는 **미국 재무부가 연준에 보유한 운영 계좌**입니다.\n- **TGA 증가 = 시장 유동성 흡수**\n- **TGA 감소 = 유동성 공급**\n- **부채한도 협상과 연동**",
         "thresholds": {"danger": (-9999, 200), "warning": (200, 400), "caution": (400, 700), "safe": (700, 9999)},
@@ -1088,7 +1074,7 @@ RISK_INDICATORS = [
     {
         "name": "⑩ MMF 총잔고",
         "yf_ticker": None,
-        "fred_id": "WRMFSL",           # ✅ 수정: MMMFFAQ027S(분기) → WRMFSL(주간), §6과 통일
+        "fred_id": "WRMFSL",
         "color": "#34d399",
         "unit": "B$",
         "fred_unit_divisor": 1,
@@ -1144,18 +1130,15 @@ for idx, info in enumerate(RISK_INDICATORS):
     st.markdown("---")
     st.markdown(f"### {info['name']}")
 
-    # ✅ 캐시 함수 재사용 (Fred 객체 중복 생성 제거)
     detail_data = None
     load_error  = None
 
     try:
         if info.get("yf_ticker"):
-            # yfinance: 2년치 일봉
             _, _, raw_h = get_yf(info["yf_ticker"], info["period"], "1d")
             if raw_h is not None and not raw_h.empty:
                 detail_data = raw_h["Close"].dropna()
         elif info.get("fred_id"):
-            # FRED: 캐시 적용된 범위 조회
             raw_s = get_fred_range(info["fred_id"], days=730)
             if raw_s is not None and len(raw_s) > 0:
                 divisor = info.get("fred_unit_divisor", 1)
@@ -1163,7 +1146,6 @@ for idx, info in enumerate(RISK_INDICATORS):
     except Exception as e:
         load_error = str(e)
 
-    # 현재값 & 상태
     current_val  = None
     status_key   = "caution"
     status_label = "데이터 없음"
@@ -1179,7 +1161,6 @@ for idx, info in enumerate(RISK_INDICATORS):
 
     style = STATUS_STYLE[status_key]
 
-    # 통계
     if detail_data is not None and len(detail_data) > 0:
         val_min    = float(detail_data.min())
         val_max    = float(detail_data.max())
@@ -1193,7 +1174,6 @@ for idx, info in enumerate(RISK_INDICATORS):
     change_display = f"{change:+.2f}" if current_val is not None else "-"
     change_color   = "#ef4444" if change > 0 else "#10b981"
 
-    # 상태 카드
     status_html = f"""
 <!DOCTYPE html><html><head>
 <style>
@@ -1237,7 +1217,6 @@ for idx, info in enumerate(RISK_INDICATORS):
 </div></body></html>"""
     components.html(status_html, height=80, scrolling=False)
 
-    # 그래프
     if detail_data is not None and len(detail_data) > 0:
         df_d = detail_data.reset_index()
         df_d.columns = ["Date", "Value"]
@@ -1302,21 +1281,22 @@ for idx, info in enumerate(RISK_INDICATORS):
                     )
                     drawn.add(tv)
 
+        # ✅ 그래프 배경색도 기존 #111827에서 #060A12 로 완전히 통일했습니다.
         fig.update_layout(
             height=480,
             margin=dict(l=10, r=80, t=55, b=40),
-            paper_bgcolor="#111827", plot_bgcolor="#111827",
+            paper_bgcolor="#060A12", plot_bgcolor="#060A12",
             font=dict(color="#D8ECF8", size=13),
             title=dict(
                 text=f"<b>{info['name']}</b> — 최근 2년 추이",
                 font=dict(size=18, color="#F0F8FF"), x=0.01,
             ),
             xaxis=dict(
-                gridcolor="#1f2937", showgrid=True, zeroline=False,
+                gridcolor="#1A2A3F", showgrid=True, zeroline=False,
                 tickfont=dict(size=12, color="#B8D4EE"),
             ),
             yaxis=dict(
-                gridcolor="#1f2937", showgrid=True, zeroline=False,
+                gridcolor="#1A2A3F", showgrid=True, zeroline=False,
                 tickfont=dict(size=12, color="#B8D4EE"),
             ),
             hovermode="x unified", showlegend=False,
@@ -1329,7 +1309,6 @@ for idx, info in enumerate(RISK_INDICATORS):
         else:
             st.warning(f"⚠️ {info['name']} — 데이터를 불러오지 못했습니다.")
 
-    # 지표 설명
     st.markdown(info["description"])
     st.markdown("**📊 단계별 판정 기준**")
 
