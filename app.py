@@ -236,43 +236,50 @@ STATUS_STYLE = {
 st.markdown("""<style>
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;600;700;900&display=swap");
 
-/* ── 스크롤바 강제 표시 ── */
-html {
-    overflow-y: scroll !important;
-    overflow-x: hidden !important;
-    scrollbar-width: thin !important;
-    scrollbar-color: #2A4A6A #060A12 !important;
+/* ══════════════════════════════════════
+   스크롤 강제 활성화 (핵심)
+   Streamlit은 내부적으로 여러 div에
+   overflow:hidden / height:100vh 를 걸어
+   스크롤을 막음 → 모두 해제
+══════════════════════════════════════ */
+html, body {
+    overflow: auto !important;
+    height: auto !important;
+    min-height: 100% !important;
 }
 
-/* Webkit(Chrome/Edge/Safari) 스크롤바 커스텀 */
-::-webkit-scrollbar {
-    width: 8px !important;
-    background: #060A12 !important;
-}
-::-webkit-scrollbar-track {
-    background: #0C1420 !important;
-    border-radius: 4px !important;
-}
-::-webkit-scrollbar-thumb {
-    background: #2A4A6A !important;
-    border-radius: 4px !important;
-    border: 1px solid #1A2A3F !important;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #3A6A9A !important;
-}
-
-/* Streamlit 내부 overflow 초기화 */
-.main, .block-container, section[data-testid="stMain"] {
+/* Streamlit 루트 컨테이너들 높이/overflow 해제 */
+#root,
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewBlockContainer"],
+[data-testid="stMain"],
+[data-testid="stMain"] > div,
+[data-testid="block-container"],
+.main,
+.main > div {
     overflow: visible !important;
     overflow-y: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
 }
 
+/* 스크롤바 커스텀 (Webkit) */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #0C1420; }
+::-webkit-scrollbar-thumb { background: #2A5A8A; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3A7ABB; }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: #2A5A8A #0C1420; }
+
+/* ── 기본 텍스트 색상 ── */
 html, body, [class*="css"], .stMarkdown, .stText, p, span, div, label {
     font-family: 'Noto Sans KR', sans-serif !important;
     color: #D8ECF8 !important;
 }
-.stApp { background: #060A12 !important; overflow-y: auto !important; }
+.stApp { background: #060A12 !important; }
 .block-container { padding-top: 2rem !important; max-width: 1400px; }
 
 h1 {
@@ -282,11 +289,8 @@ h1 {
     color: #FFFFFF !important;
     letter-spacing: 0.04em !important;
 }
-h2, h3 {
-    color: #E8F4FF !important;
-}
+h2, h3 { color: #E8F4FF !important; }
 
-/* 캡션 밝게 */
 .stCaption, .stCaption p, small {
     font-size: 1rem !important;
     font-weight: 700 !important;
@@ -294,7 +298,6 @@ h2, h3 {
     letter-spacing: 0.14em !important;
 }
 
-/* 섹션 헤더 */
 .sec-hd {
     background: linear-gradient(90deg, #00D4FF18, transparent);
     border-left: 4px solid #00D4FF;
@@ -309,7 +312,6 @@ h2, h3 {
     text-transform: uppercase;
 }
 
-/* 카드 */
 .kcard {
     background: linear-gradient(140deg, #131E2E, #0C1520);
     border: 1px solid #1E3050;
@@ -323,7 +325,6 @@ h2, h3 {
     box-shadow: 0 0 20px rgba(0,212,255,0.08);
 }
 
-/* 라벨 — 밝게 */
 .klabel {
     font-size: 0.72rem !important;
     font-weight: 700 !important;
@@ -333,7 +334,6 @@ h2, h3 {
     margin-bottom: 5px;
 }
 
-/* 값 */
 .kval {
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 1.55rem !important;
@@ -342,12 +342,10 @@ h2, h3 {
     line-height: 1.2;
 }
 
-/* 변동 */
-.kup  { color: #22D98A !important; font-size: .84rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
-.kdn  { color: #FF6B6B !important; font-size: .84rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
-.kna  { color: #7A94B0 !important; font-size: .84rem !important; font-weight: 600 !important; }
+.kup { color: #22D98A !important; font-size: .84rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
+.kdn { color: #FF6B6B !important; font-size: .84rem !important; font-weight: 700 !important; font-family: 'IBM Plex Mono', monospace !important; }
+.kna { color: #7A94B0 !important; font-size: .84rem !important; font-weight: 600 !important; }
 
-/* 서브 텍스트 — 밝게 */
 .ksub {
     color: #6E9DBF !important;
     font-size: .70rem !important;
@@ -355,19 +353,16 @@ h2, h3 {
     margin-top: 4px;
 }
 
-/* 배지 */
 .b-low { background: #10B98122; color: #22D98A !important; border: 1px solid #10B98155; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
 .b-mid { background: #F59E0B22; color: #FFCC44 !important; border: 1px solid #F59E0B55; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
 .b-hi  { background: #EF444422; color: #FF7070 !important; border: 1px solid #EF444455; padding: 2px 9px; border-radius: 99px; font-size: .70rem !important; font-weight: 700 !important; }
 
 hr { border-color: #1A2A3F !important; }
 
-/* 탭 */
 .stTabs [data-baseweb="tab-list"] { background: #0C1420; border-radius: 10px; gap: 4px; padding: 4px; }
 .stTabs [data-baseweb="tab"] { color: #7AAAC8 !important; font-family: 'IBM Plex Mono', monospace !important; font-size: .80rem !important; font-weight: 700 !important; }
 .stTabs [aria-selected="true"] { color: #00D4FF !important; background: #00D4FF18 !important; border-radius: 7px; }
 
-/* 버튼 */
 .stButton > button {
     background: #00D4FF18 !important;
     border: 1px solid #00D4FF55 !important;
@@ -382,10 +377,8 @@ hr { border-color: #1A2A3F !important; }
     border-color: #00D4FFAA !important;
 }
 
-/* 알림 */
 .stAlert p { font-weight: 700 !important; color: #D8ECF8 !important; }
 
-/* 사이드바 */
 section[data-testid="stSidebar"] { background: #080E1A !important; }
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] label,
@@ -394,11 +387,8 @@ section[data-testid="stSidebar"] span {
     color: #AACCEE !important;
 }
 
-/* 테이블 */
 .stTable th { color: #B8D8F0 !important; background: #0C1420 !important; }
 .stTable td { color: #D0E8F8 !important; }
-
-/* 타임스탬프 텍스트 */
 .stMarkdown p { color: #C8E0F4 !important; }
 </style>""", unsafe_allow_html=True)
 
