@@ -236,11 +236,43 @@ STATUS_STYLE = {
 st.markdown("""<style>
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;600;700;900&display=swap");
 
+/* ── 스크롤바 강제 표시 ── */
+html {
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #2A4A6A #060A12 !important;
+}
+
+/* Webkit(Chrome/Edge/Safari) 스크롤바 커스텀 */
+::-webkit-scrollbar {
+    width: 8px !important;
+    background: #060A12 !important;
+}
+::-webkit-scrollbar-track {
+    background: #0C1420 !important;
+    border-radius: 4px !important;
+}
+::-webkit-scrollbar-thumb {
+    background: #2A4A6A !important;
+    border-radius: 4px !important;
+    border: 1px solid #1A2A3F !important;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #3A6A9A !important;
+}
+
+/* Streamlit 내부 overflow 초기화 */
+.main, .block-container, section[data-testid="stMain"] {
+    overflow: visible !important;
+    overflow-y: visible !important;
+}
+
 html, body, [class*="css"], .stMarkdown, .stText, p, span, div, label {
     font-family: 'Noto Sans KR', sans-serif !important;
     color: #D8ECF8 !important;
 }
-.stApp { background: #060A12 !important; }
+.stApp { background: #060A12 !important; overflow-y: auto !important; }
 .block-container { padding-top: 2rem !important; max-width: 1400px; }
 
 h1 {
